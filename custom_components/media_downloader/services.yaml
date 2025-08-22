@@ -1,0 +1,32 @@
+download_file:
+  name: Download file
+  description: Download a file to the configured directory with optional subdir and filename.
+  fields:
+    url:
+      required: true
+      example: "https://example.com/file.mp4"
+      selector:
+        text:
+    subdir:
+      required: false
+      example: "ring"
+      selector:
+        text:
+    filename:
+      required: false
+      example: "video.mp4"
+      selector:
+        text:
+    overwrite:
+      required: false
+      default: false
+      selector:
+        boolean:
+    timeout:
+      required: false
+      default: 300
+      selector:
+        number:
+          min: 1
+          max: 3600
+          mode: box
