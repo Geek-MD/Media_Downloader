@@ -1,10 +1,12 @@
 {
-  "domains": ["media_downloader"],
+  "domain": "media_downloader",
   "name": "Media Downloader",
   "codeowners": ["@Geek-MD"],
   "config_flow": true,
+  "dependencies": [],
   "documentation": "https://github.com/Geek-MD/Media_Downloader",
   "iot_class": "local_push",
+  "quality_scale": "legacy",
   "requirements": [],
-  "version": "v1.0.0"
+  "version": "1.0.0"
 }
