@@ -1,0 +1,25 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Media Downloader",
+        "description": "Set the base folder where downloads will be stored.",
+        "data": {
+          "download_dir": "Base download directory (absolute path, e.g., /media)",
+          "overwrite": "Overwrite existing files by default"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Media Downloader Options",
+        "data": {
+          "download_dir": "Base download directory",
+          "overwrite": "Overwrite by default"
+        }
+      }
+    }
+  }
+}
