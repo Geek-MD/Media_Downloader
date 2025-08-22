@@ -1,0 +1,30 @@
+name: Validate manifest.json & hacs.json
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [develop, main]
+    paths:
+      - 'custom_components/media_downloader/manifest.json'
+      - 'hacs.json'
+  pull_request:
+    branches: [develop, main]
+    paths:
+      - 'custom_components/media_downloader/manifest.json'
+      - 'hacs.json'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Validate manifest.json & hacs.json
+        run: python3 .github/scripts/validate_manifest.py
