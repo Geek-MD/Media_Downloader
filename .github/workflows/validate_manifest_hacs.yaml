@@ -3,10 +3,12 @@ name: Validate manifest.json & hacs.json
 on:
   workflow_dispatch:
   push:
+    branches: [develop]
     paths:
       - 'custom_components/media_downloader/manifest.json'
       - 'hacs.json'
   pull_request:
+    branches: [develop]
     paths:
       - 'custom_components/media_downloader/manifest.json'
       - 'hacs.json'
