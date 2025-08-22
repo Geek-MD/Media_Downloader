@@ -1,5 +1,5 @@
 {
-  "domain": "media_downloader",
+  "domain": ["media_downloader"],
   "name": "Media Downloader",
   "codeowners": ["@Geek-MD"],
   "config_flow": true,
