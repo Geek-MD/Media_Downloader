@@ -1,10 +1,10 @@
 {
   "name": "Media Downloader",
   "content_in_root": false,
-  "domain": "media_downloader",
+  "domains": ["media_downloader"],
   "country": "global",
   "render_readme": true,
-  "documentation": "https://github.com/Geek-MD/Media_Downloader",
+  "filename": "custom_components/media_downloader/manifest.json",
   "homeassistant": "2024.1.0",
   "iot_class": "local_push",
   "category": "integration"
