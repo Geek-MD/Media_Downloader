@@ -3,15 +3,10 @@ from __future__ import annotations
 from typing import Any
 
 import voluptuous as vol
-
 from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
-from homeassistant.helpers.selector import (
-    BooleanSelector,
-    TextSelector,
-    TextSelectorConfig,
-)
+
 from .const import (
     DOMAIN,
     CONF_DOWNLOAD_DIR,
@@ -21,13 +16,13 @@ from .const import (
 
 STEP_USER_DATA_SCHEMA = vol.Schema(
     {
-        vol.Required(CONF_DOWNLOAD_DIR): str,  # ruta absoluta recomendada: /media o subcarpeta
+        vol.Required(CONF_DOWNLOAD_DIR): str,
         vol.Optional(CONF_OVERWRITE, default=DEFAULT_OVERWRITE): bool,
     }
 )
 
 
-class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore[arg-type]
     VERSION = 1
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> FlowResult:
@@ -39,7 +34,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     @staticmethod
     @callback
-    def async_get_options_flow(config_entry):
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> config_entries.OptionsFlow:
         return OptionsFlow(config_entry)
 
 
