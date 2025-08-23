@@ -1,17 +1,26 @@
 # Media Downloader
 
-**Media Downloader** is a custom Home Assistant integration to download media files directly into a configured folder, using a simple service call.
+**Media Downloader** is a custom Home Assistant integration to manage media files directly from Home Assistant through simple services.  
+
+Version **v1.0.1** adds new services for deleting individual files and clearing directories.
+
+---
 
 ## Features
-- Configurable base download directory.
+- Download files from any URL directly into a configured folder.
 - Optional subdirectories and custom filenames.
 - Overwrite policy (default or per call).
-- Event triggers for download started and completed.
+- Event triggers for downloads and deletions.
+- Delete a single file or all files in a directory via services.
 - Works with Home Assistant automations and scripts.
+
+---
 
 ## Requirements
 - Home Assistant 2024.1.0 or newer.
 - Valid writable directory for storing media files (e.g., `/media` or `/config/media`).
+
+---
 
 ## Installation
 1. Copy the `media_downloader` folder into:
@@ -21,24 +30,32 @@
 2. Restart Home Assistant.
 3. Add the integration from **Settings → Devices & Services → Add Integration → Media Downloader**.
 
+---
+
 ## Configuration
 When adding the integration:
 - **Base download directory**: Absolute path where files will be saved.
 - **Overwrite**: Whether existing files should be replaced by default.
 
-## Service: `media_downloader.download_file`
-Use this service to download files.
+You can change these settings later using the integration options.
 
-### Service Data
-| Field      | Required | Description                               |
-|------------|----------|-------------------------------------------|
-| `url`      | yes      | File URL to download.                     |
-| `subdir`   | no       | Optional subfolder under base directory.  |
-| `filename` | no       | Optional filename (otherwise auto-detect).|
-| `overwrite`| no       | Override default overwrite policy.        |
-| `timeout`  | no       | Download timeout in seconds (default 300).|
+---
 
-### Example:
+## Services
+
+### 1. `media_downloader.download_file`
+Downloads a file from the specified URL.
+
+#### Service Data
+| Field        | Required | Description                               |
+|---------------|----------|-------------------------------------------|
+| `url`          | yes      | File URL to download.                     |
+| `subdir`       | no       | Optional subfolder under base directory.  |
+| `filename`     | no       | Optional filename (otherwise auto-detect).|
+| `overwrite`    | no       | Override default overwrite policy.        |
+| `timeout`      | no       | Download timeout in seconds (default 300).|
+
+#### Example:
 ```
 - service: media_downloader.download_file
   data:
@@ -49,18 +66,62 @@ Use this service to download files.
     timeout: 180
 ```
 
+---
+
+### 2. `media_downloader.delete_file`
+Deletes the specified file if it exists.
+
+#### Service Data
+| Field  | Required | Description                    |
+|---------|----------|--------------------------------|
+| `path`  | yes      | Absolute path to the file.      |
+
+#### Example:
+```
+- service: media_downloader.delete_file
+  data:
+    path: "/media/ring/video.mp4"
+```
+
+---
+
+### 3. `media_downloader.delete_files_in_directory`
+Deletes all files inside the specified directory.
+
+#### Service Data
+| Field  | Required | Description                    |
+|---------|----------|--------------------------------|
+| `path`  | yes      | Absolute path to the directory. |
+
+#### Example:
+```
+- service: media_downloader.delete_files_in_directory
+  data:
+    path: "/media/ring"
+```
+
+---
+
 ## Events
-The integration fires events you can use in automations:
 
-- `media_downloader_download_started`
-- `media_downloader_download_completed`  
+The integration fires the following events:
 
-The completed event includes:
-- `success`: true/false
-- `path`: absolute path to the saved file
-- `error`: error message if failed
+| Event Name                                  | Triggered When                                  |
+|--------------------------------------------|------------------------------------------------|
+| `media_downloader_download_started`         | A download has started.                        |
+| `media_downloader_download_completed`       | A download completed (success or error).       |
+| `media_downloader_delete_completed`         | A file was deleted (success or error).         |
+| `media_downloader_delete_directory_completed` | A directory was cleared (success or error).    |
 
-### Example Automation
+Each event contains:
+- `path`: File or directory path.
+- `success`: True if the operation succeeded, false otherwise.
+- `error`: Error message if the operation failed.
+
+---
+
+## Example Automation
+
 ```
 - service: media_downloader.download_file
   data:
@@ -89,6 +150,11 @@ The completed event includes:
             title: "Media Downloader"
             message: "Error: {{ wait.trigger.event.data.error }}"
 ```
+
+#### Changed
+- Updated documentation and examples.
+
+---
 
 ## License
 MIT License. See [LICENSE](LICENSE) for details.
