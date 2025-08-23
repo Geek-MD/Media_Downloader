@@ -15,3 +15,8 @@ ATTR_TIMEOUT = "timeout"
 
 EVENT_DOWNLOAD_STARTED = "media_downloader_download_started"
 EVENT_DOWNLOAD_COMPLETED = "media_downloader_download_completed"
+
+SERVICE_DELETE_FILE = "delete_file"
+SERVICE_DELETE_DIRECTORY = "delete_files_in_directory"
+
+ATTR_PATH = "path"
