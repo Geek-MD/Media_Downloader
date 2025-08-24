@@ -20,13 +20,18 @@ from .const import (
     CONF_OVERWRITE,
     DEFAULT_OVERWRITE,
     SERVICE_DOWNLOAD_FILE,
+    SERVICE_DELETE_FILE,
+    SERVICE_DELETE_DIRECTORY,
     ATTR_URL,
     ATTR_SUBDIR,
     ATTR_FILENAME,
     ATTR_OVERWRITE,
     ATTR_TIMEOUT,
+    ATTR_PATH,
     EVENT_DOWNLOAD_STARTED,
     EVENT_DOWNLOAD_COMPLETED,
+    EVENT_DELETE_COMPLETED,
+    EVENT_DELETE_DIRECTORY_COMPLETED,
 )
 
 PLATFORMS: list = []  # No entities yet, only services
@@ -62,6 +67,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             entry.options.get(CONF_OVERWRITE, entry.data.get(CONF_OVERWRITE, DEFAULT_OVERWRITE))
         )
         return (download_dir, overwrite)
+
+    def _log_and_fire(event_type: str, success: bool, path: str, error: str | None) -> None:
+        hass.bus.async_fire(
+            event_type,
+            {"path": path, "success": success, "error": error},
+        )
+
+    # --------------------- Servicio principal: descargar archivo ---------------------
 
     async def _async_download(call: ServiceCall) -> None:
         url: str = call.data[ATTR_URL]
@@ -165,6 +178,50 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             )
             raise
 
+    # --------------------- Servicio: eliminar un archivo ---------------------
+
+    async def _async_delete_file(call: ServiceCall) -> None:
+        path_str: str = call.data[ATTR_PATH]
+        path = Path(path_str).resolve()
+        base_dir, _ = _get_config()
+
+        _ensure_within_base(base_dir, path)
+
+        try:
+            if path.is_file():
+                path.unlink()
+                _log_and_fire(EVENT_DELETE_COMPLETED, True, str(path), None)
+            else:
+                raise HomeAssistantError(f"Not a file: {path}")
+        except Exception as e:
+            _log_and_fire(EVENT_DELETE_COMPLETED, False, str(path), str(e))
+
+    # --------------------- Servicio: eliminar todos los archivos de un directorio ---------------------
+
+    async def _async_delete_directory(call: ServiceCall) -> None:
+        dir_str: str = call.data[ATTR_PATH]
+        dir_path = Path(dir_str).resolve()
+        base_dir, _ = _get_config()
+
+        _ensure_within_base(base_dir, dir_path)
+
+        if not dir_path.is_dir():
+            _log_and_fire(EVENT_DELETE_DIRECTORY_COMPLETED, False, str(dir_path), "Not a directory")
+            return
+
+        errors = []
+        for child in dir_path.iterdir():
+            try:
+                if child.is_file():
+                    child.unlink()
+            except Exception as e:
+                errors.append(f"{child}: {e}")
+
+        success = not errors
+        _log_and_fire(EVENT_DELETE_DIRECTORY_COMPLETED, success, str(dir_path), "\n".join(errors) if errors else None)
+
+    # --------------------- Registro de servicios ---------------------
+
     hass.services.async_register(
         DOMAIN,
         SERVICE_DOWNLOAD_FILE,
@@ -180,6 +237,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         ),
     )
 
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_DELETE_FILE,
+        _async_delete_file,
+        schema=vol.Schema({vol.Required(ATTR_PATH): cv.string}),
+    )
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_DELETE_DIRECTORY,
+        _async_delete_directory,
+        schema=vol.Schema({vol.Required(ATTR_PATH): cv.string}),
+    )
+
     async def _options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
         await hass.config_entries.async_reload(entry.entry_id)
 
@@ -189,4 +260,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.services.async_remove(DOMAIN, SERVICE_DOWNLOAD_FILE)
+    hass.services.async_remove(DOMAIN, SERVICE_DELETE_FILE)
+    hass.services.async_remove(DOMAIN, SERVICE_DELETE_DIRECTORY)
     return True
