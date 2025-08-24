@@ -23,12 +23,28 @@ Version **v1.0.1** adds new services for deleting individual files and clearing 
 ---
 
 ## Installation
-1. Copy the `media_downloader` folder into:
+
+### Option 1: Manual installation
+1. Download the latest release from [GitHub](https://github.com/Geek-MD/Media_Downloader/releases).
+2. Copy the `media_downloader` folder into:
    ```
    /config/custom_components/media_downloader/
    ```
-2. Restart Home Assistant.
-3. Add the integration from **Settings → Devices & Services → Add Integration → Media Downloader**.
+3. Restart Home Assistant.
+4. Add the integration from **Settings → Devices & Services → Add Integration → Media Downloader**.
+
+---
+
+### Option 2: Installation via HACS
+1. Go to **HACS → Integrations → Custom Repositories**.
+2. Add the repository URL:  
+   ```
+   https://github.com/Geek-MD/Media_Downloader
+   ```
+3. Select category **Integration**.
+4. Search for **Media Downloader** in HACS and install it.
+5. Restart Home Assistant.
+6. Add the integration from **Settings → Devices & Services → Add Integration → Media Downloader**.
 
 ---
 
