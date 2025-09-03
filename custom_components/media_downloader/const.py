@@ -22,3 +22,8 @@ EVENT_DOWNLOAD_STARTED = "media_downloader_download_started"
 EVENT_DOWNLOAD_COMPLETED = "media_downloader_download_completed"
 EVENT_DELETE_COMPLETED = "media_downloader_delete_completed"
 EVENT_DELETE_DIRECTORY_COMPLETED = "media_downloader_delete_directory_completed"
+
+ATTR_RESIZE_ENABLED = "resize_enabled"
+ATTR_RESIZE_WIDTH = "resize_width"
+ATTR_RESIZE_HEIGHT = "resize_height"
+ATTR_RESIZED = "resized"
