@@ -3,26 +3,36 @@ download_file:
   description: Download a file to the configured directory with optional subdir and filename.
   fields:
     url:
+      name: URL
+      description: The URL of the file to download.
       required: true
       example: "https://example.com/file.mp4"
       selector:
         text:
     subdir:
+      name: Subdirectory
+      description: Relative download path.
       required: false
       example: "ring"
       selector:
         text:
     filename:
+      name: Filename
+      description: Custom name for the downloaded file.
       required: false
       example: "video.mp4"
       selector:
         text:
     overwrite:
+      name: Overwrite
+      description: Overwrite file if it exists.
       required: false
       default: false
       selector:
         boolean:
     timeout:
+      name: Timeout
+      description: Download timeout in seconds.
       required: false
       default: 300
       selector:
@@ -30,3 +40,27 @@ download_file:
           min: 1
           max: 3600
           mode: box
+
+delete_file:
+  name: Delete file
+  description: Delete a specific file from the configured base directory.
+  fields:
+    path:
+      name: File path
+      description: Absolute path to the file to delete. If not provided, the default UI-configured path will be used.
+      required: false
+      example: "/media/ring/video.mp4"
+      selector:
+        text:
+
+delete_files_in_directory:
+  name: Delete files in directory
+  description: Delete all files inside the specified directory.
+  fields:
+    path:
+      name: Directory path
+      description: Absolute path to the directory to clear. If not provided, the default UI-configured directory will be used.
+      required: false
+      example: "/media/ring"
+      selector:
+        text:
