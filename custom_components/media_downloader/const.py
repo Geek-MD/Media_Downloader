@@ -2,6 +2,8 @@ DOMAIN = "media_downloader"
 
 CONF_DOWNLOAD_DIR = "download_dir"
 CONF_OVERWRITE = "overwrite"
+CONF_DELETE_FILE_PATH = "delete_file_path"
+CONF_DELETE_DIR_PATH = "delete_directory_path"
 
 DEFAULT_OVERWRITE = False
 

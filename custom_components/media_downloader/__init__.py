@@ -18,6 +18,8 @@ from .const import (
     DOMAIN,
     CONF_DOWNLOAD_DIR,
     CONF_OVERWRITE,
+    CONF_DELETE_FILE_PATH,
+    CONF_DELETE_DIR_PATH,
     DEFAULT_OVERWRITE,
     SERVICE_DOWNLOAD_FILE,
     SERVICE_DELETE_FILE,
@@ -181,10 +183,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # --------------------- Servicio: eliminar un archivo ---------------------
 
     async def _async_delete_file(call: ServiceCall) -> None:
-        path_str: str = call.data[ATTR_PATH]
+        path_str: str = call.data.get(ATTR_PATH)
+        if not path_str:
+            path_str = entry.options.get(CONF_DELETE_FILE_PATH, "")
+        if not path_str:
+            raise HomeAssistantError("No path provided for delete_file")
+
         path = Path(path_str).resolve()
         base_dir, _ = _get_config()
-
         _ensure_within_base(base_dir, path)
 
         try:
@@ -199,10 +205,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # --------------------- Servicio: eliminar todos los archivos de un directorio ---------------------
 
     async def _async_delete_directory(call: ServiceCall) -> None:
-        dir_str: str = call.data[ATTR_PATH]
+        dir_str: str = call.data.get(ATTR_PATH)
+        if not dir_str:
+            dir_str = entry.options.get(CONF_DELETE_DIR_PATH, "")
+        if not dir_str:
+            raise HomeAssistantError("No path provided for delete_files_in_directory")
+
         dir_path = Path(dir_str).resolve()
         base_dir, _ = _get_config()
-
         _ensure_within_base(base_dir, dir_path)
 
         if not dir_path.is_dir():
@@ -241,14 +251,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         DOMAIN,
         SERVICE_DELETE_FILE,
         _async_delete_file,
-        schema=vol.Schema({vol.Required(ATTR_PATH): cv.string}),
+        schema=vol.Schema({vol.Optional(ATTR_PATH): cv.string}),
     )
 
     hass.services.async_register(
         DOMAIN,
         SERVICE_DELETE_DIRECTORY,
         _async_delete_directory,
-        schema=vol.Schema({vol.Required(ATTR_PATH): cv.string}),
+        schema=vol.Schema({vol.Optional(ATTR_PATH): cv.string}),
     )
 
     async def _options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:

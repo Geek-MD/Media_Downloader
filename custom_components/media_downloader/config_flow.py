@@ -11,6 +11,8 @@ from .const import (
     DOMAIN,
     CONF_DOWNLOAD_DIR,
     CONF_OVERWRITE,
+    CONF_DELETE_FILE_PATH,
+    CONF_DELETE_DIR_PATH,
     DEFAULT_OVERWRITE,
 )
 
@@ -34,9 +36,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore[call
 
     @staticmethod
     @callback
-    def async_get_options_flow(
-        config_entry: config_entries.ConfigEntry,
-    ) -> config_entries.OptionsFlow:
+    def async_get_options_flow(config_entry: config_entries.ConfigEntry) -> config_entries.OptionsFlow:
         return OptionsFlow(config_entry)
 
 
@@ -54,11 +54,15 @@ class OptionsFlow(config_entries.OptionsFlow):
         overwrite = self.config_entry.options.get(
             CONF_OVERWRITE, self.config_entry.data.get(CONF_OVERWRITE, DEFAULT_OVERWRITE)
         )
+        delete_file_path = self.config_entry.options.get(CONF_DELETE_FILE_PATH, "")
+        delete_dir_path = self.config_entry.options.get(CONF_DELETE_DIR_PATH, "")
 
         schema = vol.Schema(
             {
                 vol.Required(CONF_DOWNLOAD_DIR, default=download_dir): str,
                 vol.Optional(CONF_OVERWRITE, default=overwrite): bool,
+                vol.Optional(CONF_DELETE_FILE_PATH, default=delete_file_path): str,
+                vol.Optional(CONF_DELETE_DIR_PATH, default=delete_dir_path): str,
             }
         )
 

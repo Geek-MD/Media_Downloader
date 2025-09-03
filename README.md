@@ -2,7 +2,7 @@
 
 **Media Downloader** is a custom Home Assistant integration to manage media files directly from Home Assistant through simple services.  
 
-Version **v1.0.1** adds new services for deleting individual files and clearing directories.
+Version **v1.0.2** adds support for configuring default delete paths via the UI.
 
 ---
 
@@ -12,6 +12,7 @@ Version **v1.0.1** adds new services for deleting individual files and clearing 
 - Overwrite policy (default or per call).
 - Event triggers for downloads and deletions.
 - Delete a single file or all files in a directory via services.
+- Default delete paths can be set in the UI (OptionsFlow).
 - Works with Home Assistant automations and scripts.
 
 ---
@@ -52,6 +53,8 @@ Version **v1.0.1** adds new services for deleting individual files and clearing 
 When adding the integration:
 - **Base download directory**: Absolute path where files will be saved.
 - **Overwrite**: Whether existing files should be replaced by default.
+- **Default file delete path**: Optional, used if no path is passed to the `delete_file` service.
+- **Default directory delete path**: Optional, used if no path is passed to the `delete_files_in_directory` service.
 
 You can change these settings later using the integration options.
 
@@ -85,12 +88,13 @@ Downloads a file from the specified URL.
 ---
 
 ### 2. `media_downloader.delete_file`
-Deletes the specified file if it exists.
+Deletes the specified file if it exists.  
+If `path` is not provided, the default path configured in the UI will be used.
 
 #### Service Data
-| Field  | Required | Description                    |
-|---------|----------|--------------------------------|
-| `path`  | yes      | Absolute path to the file.      |
+| Field  | Required | Description                                |
+|---------|----------|--------------------------------------------|
+| `path`  | no       | Absolute path to the file (overrides UI). |
 
 #### Example:
 ```
@@ -102,12 +106,13 @@ Deletes the specified file if it exists.
 ---
 
 ### 3. `media_downloader.delete_files_in_directory`
-Deletes all files inside the specified directory.
+Deletes all files inside the specified directory.  
+If `path` is not provided, the default directory configured in the UI will be used.
 
 #### Service Data
-| Field  | Required | Description                    |
-|---------|----------|--------------------------------|
-| `path`  | yes      | Absolute path to the directory. |
+| Field  | Required | Description                                        |
+|---------|----------|----------------------------------------------------|
+| `path`  | no       | Absolute path to the directory (overrides UI).     |
 
 #### Example:
 ```
@@ -166,6 +171,20 @@ Each event contains:
             title: "Media Downloader"
             message: "Error: {{ wait.trigger.event.data.error }}"
 ```
+
+---
+
+## Changelog
+
+### v1.0.2 - 2025-08-23
+#### Added
+- New service `media_downloader.delete_file`: deletes a specific file by providing `path` or using default UI-configured path.
+- New service `media_downloader.delete_files_in_directory`: deletes all files inside the specified directory by providing `path` or using default UI-configured path.
+- New events:
+  - `media_downloader_delete_completed`
+  - `media_downloader_delete_directory_completed`
+- Added installation instructions for both manual setup and HACS.
+- Added UI options to configure default paths for file and directory deletion.
 
 #### Changed
 - Updated documentation and examples.
