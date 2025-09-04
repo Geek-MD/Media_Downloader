@@ -34,14 +34,14 @@ from .const import (
     ATTR_RESIZE_ENABLED,
     ATTR_RESIZE_WIDTH,
     ATTR_RESIZE_HEIGHT,
-    ATTR_RESIZED,
-    EVENT_DOWNLOAD_STARTED,
-    EVENT_DOWNLOAD_COMPLETED,
-    EVENT_DELETE_COMPLETED,
-    EVENT_DELETE_DIRECTORY_COMPLETED,
+    PROCESS_DOWNLOADING,
+    PROCESS_RESIZING,
+    PROCESS_FILE_DELETING,
+    PROCESS_DIR_DELETING,
 )
+from .sensor import MediaDownloaderStatusSensor
 
-PLATFORMS: list = []  # No entities yet, only services
+PLATFORMS: list = ["sensor"]
 
 
 def _sanitize_filename(name: str) -> str:
@@ -63,7 +63,6 @@ def _guess_filename_from_url(url: str) -> str:
 
 
 def _get_video_dimensions(path: Path) -> tuple[int, int]:
-    """Return width and height of a video using ffprobe."""
     try:
         cmd = [
             "ffprobe", "-v", "error",
@@ -79,7 +78,6 @@ def _get_video_dimensions(path: Path) -> tuple[int, int]:
 
 
 def _resize_video(path: Path, width: int, height: int) -> bool:
-    """Resize video to specified dimensions using ffmpeg."""
     tmp_resized = path.with_suffix(".resized" + path.suffix)
     cmd = [
         "ffmpeg", "-y", "-i", str(path),
@@ -100,6 +98,12 @@ def _resize_video(path: Path, width: int, height: int) -> bool:
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
 
+    status_sensor = MediaDownloaderStatusSensor(hass)
+    hass.data[DOMAIN]["status_sensor"] = status_sensor
+    hass.async_create_task(
+        hass.config_entries.async_forward_entry_setup(entry, "sensor")
+    )
+
     @callback
     def _get_config() -> tuple[Path, bool]:
         download_dir = Path(
@@ -109,12 +113,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             entry.options.get(CONF_OVERWRITE, entry.data.get(CONF_OVERWRITE, DEFAULT_OVERWRITE))
         )
         return (download_dir, overwrite)
-
-    def _log_and_fire(event_type: str, success: bool, path: str, error: str | None) -> None:
-        hass.bus.async_fire(
-            event_type,
-            {"path": path, "success": success, "error": error},
-        )
 
     # --------------------- Servicio principal: descargar archivo ---------------------
 
@@ -128,7 +126,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         resize_enabled: bool = call.data.get(ATTR_RESIZE_ENABLED, False)
         resize_width: int = int(call.data.get(ATTR_RESIZE_WIDTH, 640))
         resize_height: int = int(call.data.get(ATTR_RESIZE_HEIGHT, 360))
-        resized: bool = False
 
         base_dir, default_overwrite = _get_config()
         base_dir = base_dir.resolve()
@@ -148,15 +145,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         do_overwrite = default_overwrite if overwrite is None else bool(overwrite)
 
-        hass.bus.async_fire(
-            EVENT_DOWNLOAD_STARTED,
-            {
-                "url": url,
-                "path": str(dest_path),
-                "overwrite": do_overwrite,
-            },
-        )
-
         session: aiohttp.ClientSession = aiohttp_client.async_get_clientsession(hass)
         tmp_path = dest_path.with_suffix(dest_path.suffix + ".part")
 
@@ -166,6 +154,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             except Exception:
                 pass
 
+        status_sensor.start_process(PROCESS_DOWNLOADING)
         try:
             async with async_timeout.timeout(timeout_sec):
                 async with session.get(url) as resp:
@@ -197,42 +186,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             else:
                 os.rename(tmp_path, dest_path)
 
-            # ---- Resize process if enabled ----
             if resize_enabled and dest_path.suffix.lower() in [".mp4", ".mov", ".mkv", ".avi"]:
+                status_sensor.start_process(PROCESS_RESIZING)
                 w, h = _get_video_dimensions(dest_path)
                 if w != resize_width or h != resize_height:
-                    if _resize_video(dest_path, resize_width, resize_height):
-                        resized = True
+                    _resize_video(dest_path, resize_width, resize_height)
+                status_sensor.end_process(PROCESS_RESIZING)
 
-            hass.bus.async_fire(
-                EVENT_DOWNLOAD_COMPLETED,
-                {
-                    "url": url,
-                    "path": str(dest_path),
-                    "success": True,
-                    "error": None,
-                    ATTR_RESIZED: resized,
-                },
-            )
-
-        except Exception as e:
-            try:
-                if tmp_path.exists():
-                    tmp_path.unlink()
-            except Exception:
-                pass
-
-            hass.bus.async_fire(
-                EVENT_DOWNLOAD_COMPLETED,
-                {
-                    "url": url,
-                    "path": str(dest_path),
-                    "success": False,
-                    "error": str(e),
-                    ATTR_RESIZED: False,
-                },
-            )
-            raise
+        finally:
+            status_sensor.end_process(PROCESS_DOWNLOADING)
 
     # --------------------- Servicio: eliminar un archivo ---------------------
 
@@ -247,14 +209,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         base_dir, _ = _get_config()
         _ensure_within_base(base_dir, path)
 
+        status_sensor.start_process(PROCESS_FILE_DELETING)
         try:
             if path.is_file():
                 path.unlink()
-                _log_and_fire(EVENT_DELETE_COMPLETED, True, str(path), None)
             else:
                 raise HomeAssistantError(f"Not a file: {path}")
-        except Exception as e:
-            _log_and_fire(EVENT_DELETE_COMPLETED, False, str(path), str(e))
+        finally:
+            status_sensor.end_process(PROCESS_FILE_DELETING)
 
     # --------------------- Servicio: eliminar todos los archivos de un directorio ---------------------
 
@@ -269,20 +231,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         base_dir, _ = _get_config()
         _ensure_within_base(base_dir, dir_path)
 
-        if not dir_path.is_dir():
-            _log_and_fire(EVENT_DELETE_DIRECTORY_COMPLETED, False, str(dir_path), "Not a directory")
-            return
+        status_sensor.start_process(PROCESS_DIR_DELETING)
+        try:
+            if not dir_path.is_dir():
+                raise HomeAssistantError(f"Not a directory: {dir_path}")
 
-        errors = []
-        for child in dir_path.iterdir():
-            try:
-                if child.is_file():
-                    child.unlink()
-            except Exception as e:
-                errors.append(f"{child}: {e}")
-
-        success = not errors
-        _log_and_fire(EVENT_DELETE_DIRECTORY_COMPLETED, success, str(dir_path), "\n".join(errors) if errors else None)
+            for child in dir_path.iterdir():
+                try:
+                    if child.is_file():
+                        child.unlink()
+                except Exception:
+                    pass
+        finally:
+            status_sensor.end_process(PROCESS_DIR_DELETING)
 
     # --------------------- Registro de servicios ---------------------
 
@@ -329,4 +290,5 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.services.async_remove(DOMAIN, SERVICE_DOWNLOAD_FILE)
     hass.services.async_remove(DOMAIN, SERVICE_DELETE_FILE)
     hass.services.async_remove(DOMAIN, SERVICE_DELETE_DIRECTORY)
+    await hass.config_entries.async_forward_entry_unload(entry, "sensor")
     return True
