@@ -8,9 +8,9 @@
 - Download files from any URL directly into a configured folder.
 - Optional subdirectories and custom filenames.
 - Overwrite policy (default or per call).
-- Event triggers for downloads and deletions.
 - Delete a single file or all files in a directory via services.
 - Optional video resize subprocess during download (width/height).
+- Persistent status sensor (`sensor.media_downloader_status`) to track operations (`idle` / `working`).
 - Works with Home Assistant automations and scripts.
 
 ---
@@ -127,22 +127,20 @@ If `path` is not provided, the default directory configured in the UI will be us
 
 ---
 
-## Events
+## Sensor
 
-The integration fires the following events:
+The integration creates a persistent sensor called **`sensor.media_downloader_status`**.  
 
-| Event Name                                  | Triggered When                                  | Extra Fields         |
-|---------------------------------------------|------------------------------------------------|----------------------|
-| `media_downloader_download_started`          | A download has started.                        | `url`, `path`        |
-| `media_downloader_download_completed`        | A download completed (success or error).       | `url`, `path`, `resized` |
-| `media_downloader_delete_completed`          | A file was deleted (success or error).         | `path`               |
-| `media_downloader_delete_directory_completed`| A directory was cleared (success or error).    | `path`               |
+### State
+- `idle`: No active processes.  
+- `working`: At least one process running (download, resize, delete).  
 
-Each event contains:
-- `path`: File or directory path.
-- `success`: True if the operation succeeded, false otherwise.
-- `error`: Error message if the operation failed.
-- `resized`: Boolean flag included in `download_completed` when `resize_enabled` was used.
+### Attributes
+| Attribute        | Description                                                             |
+|------------------|-------------------------------------------------------------------------|
+| `last_changed`   | Datetime when the state last changed.                                   |
+| `subprocess`     | Name of the current subprocess (`downloading`, `resizing`, `file_deleting`, `dir_deleting`). |
+| `active_processes` | List of all subprocesses currently running (supports chained processes). |
 
 ---
 
@@ -159,36 +157,20 @@ Each event contains:
     resize_height: 360
 
 - wait_for_trigger:
-    - platform: event
-      event_type: media_downloader_download_completed
-  timeout: "00:02:00"
+    - platform: state
+      entity_id: sensor.media_downloader_status
+      to: "idle"
+  timeout: "00:05:00"
   continue_on_timeout: true
 
 - choose:
-    - conditions: "{{ wait.completed and wait.trigger.event.data.success }}"
+    - conditions: "{{ wait.completed }}"
       sequence:
-        - service: telegram_bot.send_video
+        - service: telegram_bot.send_message
           data:
             target: -123456789
-            video: "{{ wait.trigger.event.data.path }}"
-            caption: >
-              {% if wait.trigger.event.data.resized %}
-              Download complete and resized
-              {% else %}
-              Download complete
-              {% endif %}
-    - conditions: "{{ wait.completed and not wait.trigger.event.data.success }}"
-      sequence:
-        - service: persistent_notification.create
-          data:
-            title: "Media Downloader"
-            message: "Error: {{ wait.trigger.event.data.error }}"
+            message: "Media Downloader finished all tasks."
 ```
-
----
-
-#### Changed
-- Improved service UI for `download_file` to expose resize options directly in the automation editor.
 
 ---
 
