@@ -1,8 +1,6 @@
 # Media Downloader
 
-**Media Downloader** is a custom Home Assistant integration to manage media files directly from Home Assistant through simple services.  
-
-Version **v1.0.2** adds support for configuring default delete paths via the UI.
+**Media Downloader** is a custom Home Assistant integration to manage media files directly from Home Assistant through simple services.
 
 ---
 
@@ -12,7 +10,7 @@ Version **v1.0.2** adds support for configuring default delete paths via the UI.
 - Overwrite policy (default or per call).
 - Event triggers for downloads and deletions.
 - Delete a single file or all files in a directory via services.
-- Default delete paths can be set in the UI (OptionsFlow).
+- Optional video resize subprocess during download (width/height).
 - Works with Home Assistant automations and scripts.
 
 ---
@@ -20,6 +18,7 @@ Version **v1.0.2** adds support for configuring default delete paths via the UI.
 ## Requirements
 - Home Assistant 2024.1.0 or newer.
 - Valid writable directory for storing media files (e.g., `/media` or `/config/media`).
+- `ffmpeg` and `ffprobe` must be installed and available in the system path for video resizing.
 
 ---
 
@@ -63,16 +62,20 @@ You can change these settings later using the integration options.
 ## Services
 
 ### 1. `media_downloader.download_file`
-Downloads a file from the specified URL.
+Downloads a file from the specified URL.  
+If the file is a video and `resize_enabled` is true, the integration will check the dimensions and resize the file if they do not match `resize_width` and `resize_height`.
 
 #### Service Data
-| Field        | Required | Description                               |
-|---------------|----------|-------------------------------------------|
-| `url`          | yes      | File URL to download.                     |
-| `subdir`       | no       | Optional subfolder under base directory.  |
-| `filename`     | no       | Optional filename (otherwise auto-detect).|
-| `overwrite`    | no       | Override default overwrite policy.        |
-| `timeout`      | no       | Download timeout in seconds (default 300).|
+| Field           | Required | Description                                                                 |
+|-----------------|----------|-----------------------------------------------------------------------------|
+| `url`           | yes      | File URL to download.                                                       |
+| `subdir`        | no       | Optional subfolder under base directory.                                    |
+| `filename`      | no       | Optional filename (otherwise auto-detect).                                  |
+| `overwrite`     | no       | Override default overwrite policy.                                          |
+| `timeout`       | no       | Download timeout in seconds (default 300).                                  |
+| `resize_enabled`| no       | If true, verify and resize video to the specified width/height.             |
+| `resize_width`  | no       | Target width for resize (default 640).                                      |
+| `resize_height` | no       | Target height for resize (default 360).                                     |
 
 #### Example:
 ```
@@ -81,8 +84,9 @@ Downloads a file from the specified URL.
     url: "https://example.com/video.mp4"
     subdir: "ring"
     filename: "video.mp4"
-    overwrite: true
-    timeout: 180
+    resize_enabled: true
+    resize_width: 640
+    resize_height: 360
 ```
 
 ---
@@ -127,17 +131,18 @@ If `path` is not provided, the default directory configured in the UI will be us
 
 The integration fires the following events:
 
-| Event Name                                  | Triggered When                                  |
-|--------------------------------------------|------------------------------------------------|
-| `media_downloader_download_started`         | A download has started.                        |
-| `media_downloader_download_completed`       | A download completed (success or error).       |
-| `media_downloader_delete_completed`         | A file was deleted (success or error).         |
-| `media_downloader_delete_directory_completed` | A directory was cleared (success or error).    |
+| Event Name                                  | Triggered When                                  | Extra Fields         |
+|---------------------------------------------|------------------------------------------------|----------------------|
+| `media_downloader_download_started`          | A download has started.                        | `url`, `path`        |
+| `media_downloader_download_completed`        | A download completed (success or error).       | `url`, `path`, `resized` |
+| `media_downloader_delete_completed`          | A file was deleted (success or error).         | `path`               |
+| `media_downloader_delete_directory_completed`| A directory was cleared (success or error).    | `path`               |
 
 Each event contains:
 - `path`: File or directory path.
 - `success`: True if the operation succeeded, false otherwise.
 - `error`: Error message if the operation failed.
+- `resized`: Boolean flag included in `download_completed` when `resize_enabled` was used.
 
 ---
 
@@ -149,6 +154,9 @@ Each event contains:
     url: "https://example.com/file.mp4"
     subdir: "ring"
     filename: "video.mp4"
+    resize_enabled: true
+    resize_width: 640
+    resize_height: 360
 
 - wait_for_trigger:
     - platform: event
@@ -163,7 +171,12 @@ Each event contains:
           data:
             target: -123456789
             video: "{{ wait.trigger.event.data.path }}"
-            caption: "Download complete"
+            caption: >
+              {% if wait.trigger.event.data.resized %}
+              Download complete and resized
+              {% else %}
+              Download complete
+              {% endif %}
     - conditions: "{{ wait.completed and not wait.trigger.event.data.success }}"
       sequence:
         - service: persistent_notification.create
@@ -174,20 +187,8 @@ Each event contains:
 
 ---
 
-## Changelog
-
-### v1.0.2 - 2025-08-23
-#### Added
-- New service `media_downloader.delete_file`: deletes a specific file by providing `path` or using default UI-configured path.
-- New service `media_downloader.delete_files_in_directory`: deletes all files inside the specified directory by providing `path` or using default UI-configured path.
-- New events:
-  - `media_downloader_delete_completed`
-  - `media_downloader_delete_directory_completed`
-- Added installation instructions for both manual setup and HACS.
-- Added UI options to configure default paths for file and directory deletion.
-
 #### Changed
-- Updated documentation and examples.
+- Improved service UI for `download_file` to expose resize options directly in the automation editor.
 
 ---
 

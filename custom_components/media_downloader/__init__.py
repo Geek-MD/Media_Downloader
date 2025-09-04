@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+import subprocess
 from pathlib import Path
 from typing import Optional
 
@@ -30,6 +31,10 @@ from .const import (
     ATTR_OVERWRITE,
     ATTR_TIMEOUT,
     ATTR_PATH,
+    ATTR_RESIZE_ENABLED,
+    ATTR_RESIZE_WIDTH,
+    ATTR_RESIZE_HEIGHT,
+    ATTR_RESIZED,
     EVENT_DOWNLOAD_STARTED,
     EVENT_DOWNLOAD_COMPLETED,
     EVENT_DELETE_COMPLETED,
@@ -55,6 +60,41 @@ def _ensure_within_base(base: Path, target: Path) -> None:
 def _guess_filename_from_url(url: str) -> str:
     tail = url.split("?")[0].rstrip("/").split("/")[-1]
     return _sanitize_filename(tail or "downloaded_file")
+
+
+def _get_video_dimensions(path: Path) -> tuple[int, int]:
+    """Return width and height of a video using ffprobe."""
+    try:
+        cmd = [
+            "ffprobe", "-v", "error",
+            "-select_streams", "v:0",
+            "-show_entries", "stream=width,height",
+            "-of", "csv=s=x:p=0", str(path)
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        width, height = map(int, result.stdout.strip().split("x"))
+        return width, height
+    except Exception:
+        return (0, 0)
+
+
+def _resize_video(path: Path, width: int, height: int) -> bool:
+    """Resize video to specified dimensions using ffmpeg."""
+    tmp_resized = path.with_suffix(".resized" + path.suffix)
+    cmd = [
+        "ffmpeg", "-y", "-i", str(path),
+        "-vf", f"scale={width}:{height}",
+        "-c:a", "copy",
+        str(tmp_resized)
+    ]
+    try:
+        subprocess.run(cmd, check=True)
+        os.replace(tmp_resized, path)
+        return True
+    except Exception:
+        if tmp_resized.exists():
+            tmp_resized.unlink()
+        return False
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -84,6 +124,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         filename: Optional[str] = call.data.get(ATTR_FILENAME)
         overwrite: Optional[bool] = call.data.get(ATTR_OVERWRITE)
         timeout_sec: int = int(call.data.get(ATTR_TIMEOUT, 300))
+
+        resize_enabled: bool = call.data.get(ATTR_RESIZE_ENABLED, False)
+        resize_width: int = int(call.data.get(ATTR_RESIZE_WIDTH, 640))
+        resize_height: int = int(call.data.get(ATTR_RESIZE_HEIGHT, 360))
+        resized: bool = False
 
         base_dir, default_overwrite = _get_config()
         base_dir = base_dir.resolve()
@@ -152,6 +197,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             else:
                 os.rename(tmp_path, dest_path)
 
+            # ---- Resize process if enabled ----
+            if resize_enabled and dest_path.suffix.lower() in [".mp4", ".mov", ".mkv", ".avi"]:
+                w, h = _get_video_dimensions(dest_path)
+                if w != resize_width or h != resize_height:
+                    if _resize_video(dest_path, resize_width, resize_height):
+                        resized = True
+
             hass.bus.async_fire(
                 EVENT_DOWNLOAD_COMPLETED,
                 {
@@ -159,6 +211,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     "path": str(dest_path),
                     "success": True,
                     "error": None,
+                    ATTR_RESIZED: resized,
                 },
             )
 
@@ -176,6 +229,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     "path": str(dest_path),
                     "success": False,
                     "error": str(e),
+                    ATTR_RESIZED: False,
                 },
             )
             raise
@@ -243,6 +297,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 vol.Optional(ATTR_FILENAME): cv.string,
                 vol.Optional(ATTR_OVERWRITE): cv.boolean,
                 vol.Optional(ATTR_TIMEOUT): vol.Coerce(int),
+                vol.Optional(ATTR_RESIZE_ENABLED): cv.boolean,
+                vol.Optional(ATTR_RESIZE_WIDTH): vol.Coerce(int),
+                vol.Optional(ATTR_RESIZE_HEIGHT): vol.Coerce(int),
             }
         ),
     )
