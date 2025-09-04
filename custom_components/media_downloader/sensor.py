@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from homeassistant.core import HomeAssistant
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.helpers.device_registry import DeviceInfo
 
@@ -15,7 +16,7 @@ class MediaDownloaderStatusSensor(SensorEntity):
     _attr_name = "Media Downloader Status"
     _attr_unique_id = "media_downloader_status"
 
-    def __init__(self, hass) -> None:
+    def __init__(self, hass: HomeAssistant) -> None:
         self._attr_native_value: str = "idle"
         self._attr_extra_state_attributes: dict[str, Any] = {
             "last_changed": None,
