@@ -39,7 +39,6 @@ from .const import (
     PROCESS_FILE_DELETING,
     PROCESS_DIR_DELETING,
 )
-from .sensor import MediaDownloaderStatusSensor
 
 PLATFORMS: list[str] = ["sensor"]
 
@@ -99,10 +98,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Media Downloader from a config entry."""
     hass.data.setdefault(DOMAIN, {})
 
-    status_sensor = MediaDownloaderStatusSensor(hass)
-    hass.data[DOMAIN]["status_sensor"] = status_sensor
-
-    # Use the new async_forward_entry_setups API (plural)
+    # Forward setup to sensor platform
     hass.async_create_task(
         hass.config_entries.async_forward_entry_setups(entry, ["sensor"])
     )
