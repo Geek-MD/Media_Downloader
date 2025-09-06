@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
+from datetime import datetime
 
 from homeassistant.core import HomeAssistant
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
 
@@ -59,3 +61,14 @@ class MediaDownloaderStatusSensor(SensorEntity):
             name="Media Downloader",
             manufacturer="Geek-MD",
         )
+
+
+async def async_setup_entry(
+    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+) -> None:
+    """Set up the Media Downloader sensor."""
+    sensor = hass.data[DOMAIN].get("status_sensor")
+    if sensor is None:
+        sensor = MediaDownloaderStatusSensor(hass)
+        hass.data[DOMAIN]["status_sensor"] = sensor
+    async_add_entities([sensor])
