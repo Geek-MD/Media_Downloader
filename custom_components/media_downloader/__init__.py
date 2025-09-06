@@ -41,7 +41,7 @@ from .const import (
 )
 from .sensor import MediaDownloaderStatusSensor
 
-PLATFORMS: list = ["sensor"]
+PLATFORMS: list[str] = ["sensor"]
 
 
 def _sanitize_filename(name: str) -> str:
@@ -96,12 +96,15 @@ def _resize_video(path: Path, width: int, height: int) -> bool:
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Set up Media Downloader from a config entry."""
     hass.data.setdefault(DOMAIN, {})
 
     status_sensor = MediaDownloaderStatusSensor(hass)
     hass.data[DOMAIN]["status_sensor"] = status_sensor
+
+    # Use the new async_forward_entry_setups API (plural)
     hass.async_create_task(
-        hass.config_entries.async_forward_entry_setup(entry, "sensor")
+        hass.config_entries.async_forward_entry_setups(entry, ["sensor"])
     )
 
     @callback
@@ -154,7 +157,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             except Exception:
                 pass
 
-        status_sensor.start_process(PROCESS_DOWNLOADING)
+        sensor = hass.data[DOMAIN]["status_sensor"]
+        sensor.start_process(PROCESS_DOWNLOADING)
         try:
             async with async_timeout.timeout(timeout_sec):
                 async with session.get(url) as resp:
@@ -187,14 +191,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 os.rename(tmp_path, dest_path)
 
             if resize_enabled and dest_path.suffix.lower() in [".mp4", ".mov", ".mkv", ".avi"]:
-                status_sensor.start_process(PROCESS_RESIZING)
+                sensor.start_process(PROCESS_RESIZING)
                 w, h = _get_video_dimensions(dest_path)
                 if w != resize_width or h != resize_height:
                     _resize_video(dest_path, resize_width, resize_height)
-                status_sensor.end_process(PROCESS_RESIZING)
+                sensor.end_process(PROCESS_RESIZING)
 
         finally:
-            status_sensor.end_process(PROCESS_DOWNLOADING)
+            sensor.end_process(PROCESS_DOWNLOADING)
 
     # --------------------- Servicio: eliminar un archivo ---------------------
 
@@ -209,14 +213,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         base_dir, _ = _get_config()
         _ensure_within_base(base_dir, path)
 
-        status_sensor.start_process(PROCESS_FILE_DELETING)
+        sensor = hass.data[DOMAIN]["status_sensor"]
+        sensor.start_process(PROCESS_FILE_DELETING)
         try:
             if path.is_file():
                 path.unlink()
             else:
                 raise HomeAssistantError(f"Not a file: {path}")
         finally:
-            status_sensor.end_process(PROCESS_FILE_DELETING)
+            sensor.end_process(PROCESS_FILE_DELETING)
 
     # --------------------- Servicio: eliminar todos los archivos de un directorio ---------------------
 
@@ -231,7 +236,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         base_dir, _ = _get_config()
         _ensure_within_base(base_dir, dir_path)
 
-        status_sensor.start_process(PROCESS_DIR_DELETING)
+        sensor = hass.data[DOMAIN]["status_sensor"]
+        sensor.start_process(PROCESS_DIR_DELETING)
         try:
             if not dir_path.is_dir():
                 raise HomeAssistantError(f"Not a directory: {dir_path}")
@@ -243,7 +249,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 except Exception:
                     pass
         finally:
-            status_sensor.end_process(PROCESS_DIR_DELETING)
+            sensor.end_process(PROCESS_DIR_DELETING)
 
     # --------------------- Registro de servicios ---------------------
 
@@ -287,6 +293,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Unload Media Downloader config entry."""
     hass.services.async_remove(DOMAIN, SERVICE_DOWNLOAD_FILE)
     hass.services.async_remove(DOMAIN, SERVICE_DELETE_FILE)
     hass.services.async_remove(DOMAIN, SERVICE_DELETE_DIRECTORY)
