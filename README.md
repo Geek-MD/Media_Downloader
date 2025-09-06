@@ -136,10 +136,10 @@ The integration creates a persistent sensor called **`sensor.media_downloader_st
 - `working`: At least one process running (download, resize, delete).  
 
 ### Attributes
-| Attribute        | Description                                                             |
-|------------------|-------------------------------------------------------------------------|
-| `last_changed`   | Datetime when the state last changed.                                   |
-| `subprocess`     | Name of the current subprocess (`downloading`, `resizing`, `file_deleting`, `dir_deleting`). |
+| Attribute          | Description                                                             |
+|--------------------|-------------------------------------------------------------------------|
+| `last_changed`     | Datetime when the state last changed.                                   |
+| `subprocess`       | Name of the current subprocess (`downloading`, `resizing`, `file_deleting`, `dir_deleting`). |
 | `active_processes` | List of all subprocesses currently running (supports chained processes). |
 
 ---
