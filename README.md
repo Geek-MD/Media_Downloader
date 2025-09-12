@@ -1,3 +1,12 @@
+[![Geek-MD - Media Downloader](https://img.shields.io/static/v1?label=Geek-MD&message=HA%20Media%20Downloader&color=blue&logo=github)](https://github.com/Geek-MD/Media_Downloader)
+[![Stars](https://img.shields.io/github/stars/Geek-MD/Media_Downloader?style=social)](https://github.com/Geek-MD/Media_Downloader)
+[![Forks](https://img.shields.io/github/forks/Geek-MD/Media_Downloader?style=social)](https://github.com/Geek-MD/Media_Downloader)
+
+[![GitHub Release](https://img.shields.io/github/release/Geek-MD/Media_Downloader?include_prereleases&sort=semver&color=blue)](https://github.com/Geek-MD/Media_Downloader/releases)
+[![License](https://img.shields.io/badge/License-MIT-blue)](#license)
+![HACS Custom Repository](https://img.shields.io/badge/HACS-Custom%20Repository-blue)
+[![Ruff](https://github.com/Geek-MD/Media_Downloader/actions/workflows/ci.yaml/badge.svg?branch=main&label=Ruff)](https://github.com/Geek-MD/Media_Downloader/actions/workflows/ci.yaml)
+
 # Media Downloader
 
 **Media Downloader** is a custom Home Assistant integration to manage media files directly from Home Assistant through simple services.
@@ -11,6 +20,7 @@
 - Delete a single file or all files in a directory via services.
 - Optional video resize subprocess during download (width/height).
 - Persistent status sensor (`sensor.media_downloader_status`) to track operations (`idle` / `working`).
+- Event support for download and resize (completed/failed).
 - Works with Home Assistant automations and scripts.
 
 ---
@@ -144,8 +154,22 @@ The integration creates a persistent sensor called **`sensor.media_downloader_st
 
 ---
 
+## Events
+
+Starting from **v1.0.6**, the integration fires the following events:
+
+| Event Name                           | Triggered When                                 | Data Fields                                  |
+|--------------------------------------|-----------------------------------------------|----------------------------------------------|
+| `media_downloader_download_completed`| A download finished successfully.              | `url`, `path`, `resized`                     |
+| `media_downloader_download_failed`   | A download failed.                             | `url`, `error`                               |
+| `media_downloader_resize_completed`  | A resize finished successfully.                | `path`, `width`, `height`                    |
+| `media_downloader_resize_failed`     | A resize failed.                               | `path`, `width`, `height`                    |
+
+---
+
 ## Example Automation
 
+### Wait for sensor state
 ```
 - service: media_downloader.download_file
   data:
@@ -163,13 +187,24 @@ The integration creates a persistent sensor called **`sensor.media_downloader_st
   timeout: "00:05:00"
   continue_on_timeout: true
 
-- choose:
-    - conditions: "{{ wait.completed }}"
-      sequence:
-        - service: telegram_bot.send_message
-          data:
-            target: -123456789
-            message: "Media Downloader finished all tasks."
+- service: telegram_bot.send_message
+  data:
+    target: -123456789
+    message: "Media Downloader finished all tasks."
+```
+
+### React to download failure via event
+```
+trigger:
+  - platform: event
+    event_type: media_downloader_download_failed
+action:
+  - service: persistent_notification.create
+    data:
+      title: "Media Downloader"
+      message: >
+        Download failed for {{ trigger.event.data.url }}:
+        {{ trigger.event.data.error }}
 ```
 
 ---
