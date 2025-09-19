@@ -211,16 +211,6 @@ action:
 
 ---
 
-## Changelog
-
-### v1.0.7 - 2025-09-xx
-#### Added
-- New event: `media_downloader_job_completed`  
-  - Fired when a complete job (download + optional resize) finishes successfully.  
-  - Includes: `url`, `path`, `resized`.
-
----
-
 ## License
 MIT License. See [LICENSE](LICENSE) for details.
 
