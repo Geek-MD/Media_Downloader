@@ -45,8 +45,6 @@
 3. Restart Home Assistant.
 4. Add the integration from **Settings → Devices & Services → Add Integration → Media Downloader**.
 
----
-
 ### Option 2: Installation via HACS
 1. Go to **HACS → Integrations → Custom Repositories**.
 2. Add the repository URL:  
