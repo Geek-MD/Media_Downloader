@@ -22,7 +22,7 @@
 - Delete a single file or all files in a directory via services.
 - Optional video resize subprocess during download (width/height).
 - Persistent status sensor (`sensor.media_downloader_status`) to track operations (`idle` / `working`).
-- Event support for download and resize (completed/failed).
+- Event support for download, resize, and job completion.
 - Works with Home Assistant automations and scripts.
 
 ---
@@ -158,7 +158,7 @@ The integration creates a persistent sensor called **`sensor.media_downloader_st
 
 ## Events
 
-Starting from **v1.0.6**, the integration fires the following events:
+Starting from **v1.0.7**, the integration fires the following events:
 
 | Event Name                           | Triggered When                                 | Data Fields                                  |
 |--------------------------------------|-----------------------------------------------|----------------------------------------------|
@@ -166,12 +166,13 @@ Starting from **v1.0.6**, the integration fires the following events:
 | `media_downloader_download_failed`   | A download failed.                             | `url`, `error`                               |
 | `media_downloader_resize_completed`  | A resize finished successfully.                | `path`, `width`, `height`                    |
 | `media_downloader_resize_failed`     | A resize failed.                               | `path`, `width`, `height`                    |
+| `media_downloader_job_completed`     | A full job (download + optional resize) is complete. | `url`, `path`, `resized`              |
 
 ---
 
-## Example Automation
+## Example Automations
 
-### Wait for sensor state
+### Wait for job completion
 ```
 - service: media_downloader.download_file
   data:
@@ -183,16 +184,15 @@ Starting from **v1.0.6**, the integration fires the following events:
     resize_height: 360
 
 - wait_for_trigger:
-    - platform: state
-      entity_id: sensor.media_downloader_status
-      to: "idle"
+    - platform: event
+      event_type: media_downloader_job_completed
   timeout: "00:05:00"
   continue_on_timeout: true
 
 - service: telegram_bot.send_message
   data:
     target: -123456789
-    message: "Media Downloader finished all tasks."
+    message: "Media Downloader job completed."
 ```
 
 ### React to download failure via event
@@ -211,5 +211,17 @@ action:
 
 ---
 
+## Changelog
+
+### v1.0.7 - 2025-09-xx
+#### Added
+- New event: `media_downloader_job_completed`  
+  - Fired when a complete job (download + optional resize) finishes successfully.  
+  - Includes: `url`, `path`, `resized`.
+
+---
+
 ## License
 MIT License. See [LICENSE](LICENSE) for details.
+
+---
