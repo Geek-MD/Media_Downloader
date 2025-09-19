@@ -155,6 +155,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         sensor = hass.data[DOMAIN]["status_sensor"]
         sensor.start_process(PROCESS_DOWNLOADING)
+
         try:
             async with async_timeout.timeout(timeout_sec):
                 async with session.get(url) as resp:
@@ -186,13 +187,61 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             else:
                 os.rename(tmp_path, dest_path)
 
+            # Fire download completed event
+            hass.bus.async_fire(
+                "media_downloader_download_completed",
+                {
+                    "url": url,
+                    "path": str(dest_path),
+                    "resized": resize_enabled,
+                },
+            )
+
             if resize_enabled and dest_path.suffix.lower() in [".mp4", ".mov", ".mkv", ".avi"]:
                 sensor.start_process(PROCESS_RESIZING)
-                w, h = _get_video_dimensions(dest_path)
-                if w != resize_width or h != resize_height:
-                    _resize_video(dest_path, resize_width, resize_height)
-                sensor.end_process(PROCESS_RESIZING)
+                try:
+                    w, h = _get_video_dimensions(dest_path)
+                    if w != resize_width or h != resize_height:
+                        if _resize_video(dest_path, resize_width, resize_height):
+                            hass.bus.async_fire(
+                                "media_downloader_resize_completed",
+                                {
+                                    "path": str(dest_path),
+                                    "width": resize_width,
+                                    "height": resize_height,
+                                },
+                            )
+                        else:
+                            hass.bus.async_fire(
+                                "media_downloader_resize_failed",
+                                {
+                                    "path": str(dest_path),
+                                    "width": resize_width,
+                                    "height": resize_height,
+                                },
+                            )
+                    else:
+                        # Already at expected size, still count as completed
+                        hass.bus.async_fire(
+                            "media_downloader_resize_completed",
+                            {
+                                "path": str(dest_path),
+                                "width": resize_width,
+                                "height": resize_height,
+                            },
+                        )
+                finally:
+                    sensor.end_process(PROCESS_RESIZING)
 
+        except Exception as err:
+            hass.bus.async_fire(
+                "media_downloader_download_failed",
+                {
+                    "url": url,
+                    "error": str(err),
+                },
+            )
+            raise
         finally:
             sensor.end_process(PROCESS_DOWNLOADING)
 
