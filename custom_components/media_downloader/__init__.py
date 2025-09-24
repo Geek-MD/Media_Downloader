@@ -197,6 +197,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 },
             )
 
+            # Si no hay resize -> job_completed aquí mismo
+            if not resize_enabled:
+                hass.bus.async_fire(
+                    "media_downloader_job_completed",
+                    {
+                        "url": url,
+                        "path": str(dest_path),
+                        "resized": False,
+                    },
+                )
+
             if resize_enabled and dest_path.suffix.lower() in [".mp4", ".mov", ".mkv", ".avi"]:
                 sensor.start_process(PROCESS_RESIZING)
                 try:
@@ -211,6 +222,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                                     "height": resize_height,
                                 },
                             )
+                            hass.bus.async_fire(
+                                "media_downloader_job_completed",
+                                {
+                                    "url": url,
+                                    "path": str(dest_path),
+                                    "resized": True,
+                                },
+                            )
                         else:
                             hass.bus.async_fire(
                                 "media_downloader_resize_failed",
@@ -221,13 +240,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                                 },
                             )
                     else:
-                        # Already at expected size, still count as completed
+                        # Already correct size
                         hass.bus.async_fire(
                             "media_downloader_resize_completed",
                             {
                                 "path": str(dest_path),
                                 "width": resize_width,
                                 "height": resize_height,
+                            },
+                        )
+                        hass.bus.async_fire(
+                            "media_downloader_job_completed",
+                            {
+                                "url": url,
+                                "path": str(dest_path),
+                                "resized": True,
                             },
                         )
                 finally:
