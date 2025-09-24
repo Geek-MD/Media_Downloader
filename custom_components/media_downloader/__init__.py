@@ -45,11 +45,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     hass.data.setdefault(DOMAIN, {})
 
-    directory = Path(entry.data[CONF_DIRECTORY])
+    directory = Path(entry.data[CONF_DOWNLOAD_DIR])
     overwrite = entry.data.get(CONF_OVERWRITE, DEFAULT_OVERWRITE)
-    default_file_delete_path = entry.data.get(CONF_DELETE_PATH)
+    default_file_delete_path = entry.data.get(CONF_DELETE_FILE_PATH)
     default_dir_delete_path = entry.data.get(CONF_DELETE_DIR_PATH)
-
+    
     if not directory.exists():
         directory.mkdir(parents=True, exist_ok=True)
 
@@ -77,7 +77,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         tmp_path = dest_path.with_suffix(dest_path.suffix + ".part")
 
-        sensor.start_process("downloading")
+        sensor.start_process(PROCESS_DOWNLOADING)
 
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -114,7 +114,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             )
 
             if resize_enabled:
-                sensor.start_process("resizing")
+                sensor.start_process(PROCESS_RESIZING)
                 success = await hass.async_add_executor_job(
                     _resize_video, dest_path, resize_width, resize_height
                 )
@@ -140,7 +140,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                             "height": resize_height,
                         },
                     )
-                sensor.end_process("resizing")
+                 sensor.end_process(PROCESS_RESIZING)
             else:
                 hass.bus.async_fire(
                     "media_downloader_job_completed",
@@ -148,7 +148,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 )
 
         finally:
-            sensor.end_process("downloading")
+            sensor.end_process(PROCESS_DOWNLOADING)
 
     async def _async_delete_file(call: ServiceCall) -> None:
         """Handle delete_file service."""
@@ -157,7 +157,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             _LOGGER.warning("No path provided for delete_file")
             return
 
-        sensor.start_process("file_deleting")
+        sensor.start_process(PROCESS_FILE_DELETING)
         try:
             if path.exists() and path.is_file():
                 path.unlink()
@@ -171,7 +171,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     {"path": str(path), "success": False, "error": "File not found"},
                 )
         finally:
-            sensor.end_process("file_deleting")
+            sensor.end_process(PROCESS_FILE_DELETING)
 
     async def _async_delete_files_in_directory(call: ServiceCall) -> None:
         """Handle delete_files_in_directory service."""
@@ -180,7 +180,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             _LOGGER.warning("No path provided for delete_files_in_directory")
             return
 
-        sensor.start_process("dir_deleting")
+        sensor.start_process(PROCESS_DIR_DELETING)
         try:
             if dir_path.exists() and dir_path.is_dir():
                 for f in dir_path.iterdir():
@@ -196,7 +196,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     {"path": str(dir_path), "success": False, "error": "Directory not found"},
                 )
         finally:
-            sensor.end_process("dir_deleting")
+            sensor.end_process(PROCESS_DIR_DELETING)
 
     hass.services.async_register(DOMAIN, SERVICE_DOWNLOAD_FILE, _async_download)
     hass.services.async_register(DOMAIN, SERVICE_DELETE_FILE, _async_delete_file)
