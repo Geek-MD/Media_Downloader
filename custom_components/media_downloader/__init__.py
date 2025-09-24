@@ -9,26 +9,27 @@ import re
 import shutil
 import subprocess
 import json
-from datetime import timedelta
 from pathlib import Path
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers.typing import ConfigType
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
     DOMAIN,
-    CONF_DIRECTORY,
+    CONF_DOWNLOAD_DIR,
     CONF_OVERWRITE,
-    CONF_DELETE_PATH,
+    CONF_DELETE_FILE_PATH,
     CONF_DELETE_DIR_PATH,
     DEFAULT_OVERWRITE,
     DEFAULT_TIMEOUT,
     SERVICE_DOWNLOAD_FILE,
     SERVICE_DELETE_FILE,
     SERVICE_DELETE_FILES_IN_DIRECTORY,
+    PROCESS_DOWNLOADING,
+    PROCESS_RESIZING,
+    PROCESS_FILE_DELETING,
+    PROCESS_DIR_DELETING,
 )
 
 _LOGGER = logging.getLogger(__name__)
