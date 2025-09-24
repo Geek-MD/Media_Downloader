@@ -22,6 +22,7 @@
 - Delete a single file or all files in a directory via services.
 - Optional video resize subprocess during download (width/height).
 - Robust detection of video dimensions using `ffprobe` (JSON) with `ffmpeg -i` fallback.
+- **Ensures correct aspect ratio** by normalizing SAR/DAR, preventing videos from appearing distorted or square in apps like Telegram.
 - Persistent status sensor (`sensor.media_downloader_status`) to track operations (`idle` / `working`).
 - Event support for download, resize, and job completion.
 - Works with Home Assistant automations and scripts.
