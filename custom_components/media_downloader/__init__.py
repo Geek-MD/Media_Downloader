@@ -49,7 +49,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     overwrite = entry.data.get(CONF_OVERWRITE, DEFAULT_OVERWRITE)
     default_file_delete_path = entry.data.get(CONF_DELETE_FILE_PATH)
     default_dir_delete_path = entry.data.get(CONF_DELETE_DIR_PATH)
-    
+
     if not directory.exists():
         directory.mkdir(parents=True, exist_ok=True)
 
@@ -140,7 +140,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                             "height": resize_height,
                         },
                     )
-                 sensor.end_process(PROCESS_RESIZING)
+                sensor.end_process(PROCESS_RESIZING)
             else:
                 hass.bus.async_fire(
                     "media_downloader_job_completed",
