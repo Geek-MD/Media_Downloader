@@ -21,6 +21,7 @@
 - Overwrite policy (default or per call).
 - Delete a single file or all files in a directory via services.
 - Optional video resize subprocess during download (width/height).
+- Robust detection of video dimensions using `ffprobe` (JSON) with `ffmpeg -i` fallback.
 - Persistent status sensor (`sensor.media_downloader_status`) to track operations (`idle` / `working`).
 - Event support for download, resize, and job completion.
 - Works with Home Assistant automations and scripts.
@@ -30,7 +31,7 @@
 ## Requirements
 - Home Assistant 2024.1.0 or newer.
 - Valid writable directory for storing media files (e.g., `/media` or `/config/media`).
-- `ffmpeg` and `ffprobe` must be installed and available in the system path for video resizing.
+- `ffmpeg` and `ffprobe` must be installed and available in the system path for video resizing and dimension detection.
 
 ---
 
@@ -44,6 +45,8 @@
    ```
 3. Restart Home Assistant.
 4. Add the integration from **Settings → Devices & Services → Add Integration → Media Downloader**.
+
+---
 
 ### Option 2: Installation via HACS
 1. Go to **HACS → Integrations → Custom Repositories**.
@@ -156,7 +159,7 @@ The integration creates a persistent sensor called **`sensor.media_downloader_st
 
 ## Events
 
-Starting from **v1.0.7**, the integration fires the following events:
+Available events:
 
 | Event Name                           | Triggered When                                 | Data Fields                                  |
 |--------------------------------------|-----------------------------------------------|----------------------------------------------|
@@ -193,23 +196,7 @@ Starting from **v1.0.7**, the integration fires the following events:
     message: "Media Downloader job completed."
 ```
 
-### React to download failure via event
-```
-trigger:
-  - platform: event
-    event_type: media_downloader_download_failed
-action:
-  - service: persistent_notification.create
-    data:
-      title: "Media Downloader"
-      message: >
-        Download failed for {{ trigger.event.data.url }}:
-        {{ trigger.event.data.error }}
-```
-
 ---
 
 ## License
 MIT License. See [LICENSE](LICENSE) for details.
-
----
