@@ -53,7 +53,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if not directory.exists():
         directory.mkdir(parents=True, exist_ok=True)
 
-    sensor = hass.data[DOMAIN]["sensor"]
+    # Recuperamos el sensor desde hass.data (lo crea sensor.py)
+    sensor = hass.data[DOMAIN].get("status_sensor")
+    if sensor is None:
+        _LOGGER.error("Media Downloader status sensor is not initialized")
+        return False
 
     async def _async_download(call: ServiceCall) -> None:
         """Handle download_file service."""
