@@ -6,10 +6,11 @@ CONF_DELETE_FILE_PATH = "delete_file_path"
 CONF_DELETE_DIR_PATH = "delete_directory_path"
 
 DEFAULT_OVERWRITE = False
+DEFAULT_TIMEOUT = 300  # <- agregado
 
 SERVICE_DOWNLOAD_FILE = "download_file"
 SERVICE_DELETE_FILE = "delete_file"
-SERVICE_DELETE_DIRECTORY = "delete_files_in_directory"
+SERVICE_DELETE_FILES_IN_DIRECTORY = "delete_files_in_directory"  # <- corregido
 
 ATTR_URL = "url"
 ATTR_SUBDIR = "subdir"
