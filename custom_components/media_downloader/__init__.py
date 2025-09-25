@@ -21,19 +21,17 @@ from .const import (
     DEFAULT_OVERWRITE,
     SERVICE_DOWNLOAD_FILE,
     SERVICE_DELETE_FILE,
-    SERVICE_DELETE_DIRECTORY,
+    SERVICE_DELETE_FILES_IN_DIRECTORY,
     ATTR_URL,
     ATTR_SUBDIR,
     ATTR_FILENAME,
     ATTR_OVERWRITE,
     ATTR_TIMEOUT,
-    ATTR_PATH,
     ATTR_RESIZE_ENABLED,
     ATTR_RESIZE_WIDTH,
     ATTR_RESIZE_HEIGHT,
     ATTR_RESIZED,
     PROCESS_DOWNLOADING,
-    PROCESS_RESIZING,
     PROCESS_FILE_DELETING,
     PROCESS_DIR_DELETING,
 )
@@ -76,7 +74,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         async def _register_sensor() -> None:
             """Register the sensor in Home Assistant if not already added."""
-            await hass.helpers.entity_component.async_add_entities([sensor])  # type: ignore
+            await hass.helpers.entity_component.async_add_entities([sensor])
 
         hass.async_create_task(_register_sensor())
 
@@ -126,7 +124,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
             resized = False
             if resize_enabled and file_path.exists():
-                # Verificar dimensiones con ffprobe
                 try:
                     probe = subprocess.run(
                         [
@@ -236,6 +233,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     hass.services.async_register(DOMAIN, SERVICE_DOWNLOAD_FILE, handle_download_file)
     hass.services.async_register(DOMAIN, SERVICE_DELETE_FILE, handle_delete_file)
-    hass.services.async_register(DOMAIN, SERVICE_DELETE_DIRECTORY, handle_delete_directory)
+    hass.services.async_register(
+        DOMAIN, SERVICE_DELETE_FILES_IN_DIRECTORY, handle_delete_directory
+    )
 
     return True
