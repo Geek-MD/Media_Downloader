@@ -102,7 +102,7 @@ def _resize_video(path: Path, width: int, height: int) -> bool:
     tmp_resized = path.with_suffix(".resized" + path.suffix)
     cmd = [
         "ffmpeg", "-y", "-i", str(path),
-        "-vf", f"scale={width}:{height}",
+        "-vf", f"scale={width}:{height},setsar=1,setdar={width}/{height}",
         "-c:a", "copy",
         str(tmp_resized)
     ]
