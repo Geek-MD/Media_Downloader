@@ -1,4 +1,4 @@
-[![Geek-MD - Media Downloader](https://img.shields.io/static/v1?label=Geek-MD&message=HA%20Media%20Downloader&color=blue&logo=github)](https://github.com/Geek-MD/Media_Downloader)
+[![Geek-MD - Media Downloader](https://img.shields.io/static/v1?label=Geek-MD&message=Media%20Downloader&color=blue&logo=github)](https://github.com/Geek-MD/Media_Downloader)
 [![Stars](https://img.shields.io/github/stars/Geek-MD/Media_Downloader?style=social)](https://github.com/Geek-MD/Media_Downloader)
 [![Forks](https://img.shields.io/github/forks/Geek-MD/Media_Downloader?style=social)](https://github.com/Geek-MD/Media_Downloader)
 
@@ -20,10 +20,11 @@
 - Optional subdirectories and custom filenames.
 - Overwrite policy (default or per call).
 - Delete a single file or all files in a directory via services.
+- Automatic **thumbnail embedding** into all downloaded videos (fixes Telegram square video issue).
 - Optional video resize subprocess during download (width/height).
 - Robust detection of video dimensions using `ffprobe` (JSON) with `ffmpeg -i` fallback.
 - Persistent status sensor (`sensor.media_downloader_status`) to track operations (`idle` / `working`).
-- Event support for download, resize, and job completion.
+- Event support for download, resize, job completion, and thumbnail.
 - Works with Home Assistant automations and scripts.
 
 ---
@@ -31,7 +32,7 @@
 ## Requirements
 - Home Assistant 2024.1.0 or newer.
 - Valid writable directory for storing media files (e.g., `/media` or `/config/media`).
-- `ffmpeg` and `ffprobe` must be installed and available in the system path for video resizing and dimension detection.
+- `ffmpeg` and `ffprobe` must be installed and available in the system path for video resizing, thumbnail generation, and dimension detection.
 
 ---
 
@@ -76,7 +77,8 @@ You can change these settings later using the integration options.
 
 ### 1. `media_downloader.download_file`
 Downloads a file from the specified URL.  
-If the file is a video and `resize_enabled` is true, the integration will check the dimensions and resize the file if they do not match `resize_width` and `resize_height`.
+If the file is a video, a **thumbnail will always be embedded** after download.  
+If `resize_enabled` is true, the integration will check the dimensions and resize the file if they do not match `resize_width` and `resize_height`.
 
 #### Service Data
 | Field           | Required | Description                                                                 |
@@ -113,13 +115,6 @@ If `path` is not provided, the default path configured in the UI will be used.
 |---------|----------|--------------------------------------------|
 | `path`  | no       | Absolute path to the file (overrides UI). |
 
-#### Example:
-```
-- service: media_downloader.delete_file
-  data:
-    path: "/media/ring/video.mp4"
-```
-
 ---
 
 ### 3. `media_downloader.delete_files_in_directory`
@@ -130,13 +125,6 @@ If `path` is not provided, the default directory configured in the UI will be us
 | Field  | Required | Description                                        |
 |---------|----------|----------------------------------------------------|
 | `path`  | no       | Absolute path to the directory (overrides UI).     |
-
-#### Example:
-```
-- service: media_downloader.delete_files_in_directory
-  data:
-    path: "/media/ring"
-```
 
 ---
 
@@ -161,13 +149,13 @@ The integration creates a persistent sensor called **`sensor.media_downloader_st
 
 Available events:
 
-| Event Name                           | Triggered When                                 | Data Fields                                  |
-|--------------------------------------|-----------------------------------------------|----------------------------------------------|
-| `media_downloader_download_completed`| A download finished successfully.              | `url`, `path`, `resized`                     |
-| `media_downloader_download_failed`   | A download failed.                             | `url`, `error`                               |
-| `media_downloader_resize_completed`  | A resize finished successfully.                | `path`, `width`, `height`                    |
-| `media_downloader_resize_failed`     | A resize failed.                               | `path`, `width`, `height`                    |
-| `media_downloader_job_completed`     | A full job (download + optional resize) is complete. | `url`, `path`, `resized`              |
+| Event Name                           | Triggered When                                 | Data Fields                                                |
+|--------------------------------------|-----------------------------------------------|------------------------------------------------------------|
+| `media_downloader_download_completed`| A download finished successfully.              | `url`, `path`, `resized`, `thumbnail`                      |
+| `media_downloader_download_failed`   | A download failed.                             | `url`, `error`                                             |
+| `media_downloader_resize_completed`  | A resize finished successfully.                | `path`, `width`, `height`, `thumbnail`                     |
+| `media_downloader_resize_failed`     | A resize failed.                               | `path`, `width`, `height`, `thumbnail`                     |
+| `media_downloader_job_completed`     | A full job (download + optional resize + thumbnail) is complete. | `url`, `path`, `resized`, `thumbnail` |
 
 ---
 
@@ -193,7 +181,7 @@ Available events:
 - service: telegram_bot.send_message
   data:
     target: -123456789
-    message: "Media Downloader job completed."
+    message: "Media Downloader job completed with thumbnail."
 ```
 
 ---
