@@ -1,6 +1,10 @@
 download_file:
   name: Download file
-  description: Download a file to the configured directory with optional subdir and filename.
+  description: >
+    Download a file to the configured directory with optional subdir and filename.
+    If the file is a video, a thumbnail will always be generated and embedded to ensure
+    correct previews in Telegram and other platforms. Optionally, the video can also
+    be resized to custom dimensions.
   fields:
     url:
       name: URL
@@ -42,7 +46,9 @@ download_file:
           mode: box
     resize_enabled:
       name: Resize video
-      description: Enable resizing if dimensions do not match width/height.
+      description: >
+        Enable resizing if dimensions do not match width/height. Thumbnail generation
+        is always applied to videos, even if resizing is disabled.
       required: false
       default: false
       selector:
