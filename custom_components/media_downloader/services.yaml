@@ -1,7 +1,9 @@
 download_file:
   name: Download file
-  description: Download a file to the configured directory with optional subdir and filename.
-  icon: mdi:download
+  description: >
+    Download a file to the configured directory with optional subdir and filename.
+    If the file is a video, a thumbnail will always be embedded after download.
+  target: {}  # vacío si no hay entidades
   fields:
     url:
       name: URL
@@ -52,7 +54,7 @@ download_file:
       name: Resize width
       description: Target width for video resize (only if resize is enabled).
       required: false
-      default: 848
+      default: 640
       selector:
         number:
           min: 1
@@ -62,7 +64,7 @@ download_file:
       name: Resize height
       description: Target height for video resize (only if resize is enabled).
       required: false
-      default: 460
+      default: 360
       selector:
         number:
           min: 1
@@ -72,7 +74,7 @@ download_file:
 delete_file:
   name: Delete file
   description: Delete a specific file from the configured base directory.
-  icon: mdi:file-remove
+  target: {}
   fields:
     path:
       name: File path
@@ -85,7 +87,7 @@ delete_file:
 delete_files_in_directory:
   name: Delete files in directory
   description: Delete all files inside the specified directory.
-  icon: mdi:folder-remove
+  target: {}
   fields:
     path:
       name: Directory path
