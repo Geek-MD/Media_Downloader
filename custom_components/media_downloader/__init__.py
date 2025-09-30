@@ -66,7 +66,6 @@ def _guess_filename_from_url(url: str) -> str:
 
 def _get_video_dimensions(path: Path) -> tuple[int, int]:
     """Return video dimensions (width, height) using ffprobe and fallback to ffmpeg -i."""
-    # Método principal: ffprobe en JSON
     try:
         cmd = [
             "ffprobe", "-v", "error",
@@ -85,7 +84,6 @@ def _get_video_dimensions(path: Path) -> tuple[int, int]:
     except Exception as err:
         _LOGGER.warning("ffprobe failed to get dimensions for %s: %s", path, err)
 
-    # Fallback: ffmpeg -i (stderr)
     try:
         cmd = ["ffmpeg", "-i", str(path)]
         result = subprocess.run(cmd, capture_output=True, text=True, check=False)
@@ -102,7 +100,7 @@ def _resize_video(path: Path, width: int, height: int) -> bool:
     tmp_resized = path.with_suffix(".resized" + path.suffix)
     cmd = [
         "ffmpeg", "-y", "-i", str(path),
-        "-vf", f"scale={width}:{height},setsar=1,setdar={width}/{height}",
+        "-vf", f"scale={width}:{height}",
         "-c:a", "copy",
         str(tmp_resized)
     ]
@@ -117,11 +115,51 @@ def _resize_video(path: Path, width: int, height: int) -> bool:
         return False
 
 
+def _add_thumbnail(path: Path) -> bool:
+    """Generate and embed a thumbnail to ensure Telegram preview is correct."""
+    thumb_path = path.with_suffix(".thumb.jpg")
+    tmp_with_thumb = path.with_suffix(".withthumb" + path.suffix)
+    try:
+        # Generate thumbnail at 1 second into the video
+        subprocess.run(
+            [
+                "ffmpeg", "-y", "-i", str(path), "-ss", "00:00:01", "-vframes", "1",
+                str(thumb_path),
+            ],
+            check=True,
+        )
+
+        # Get video dimensions to embed with correct aspect ratio
+        w, h = _get_video_dimensions(path)
+        if w == 0 or h == 0:
+            w, h = 640, 360  # fallback default
+
+        subprocess.run(
+            [
+                "ffmpeg", "-y", "-i", str(path), "-i", str(thumb_path),
+                "-map", "0", "-map", "1", "-c", "copy",
+                "-disposition:v:1", "attached_pic",
+                str(tmp_with_thumb),
+            ],
+            check=True,
+        )
+
+        os.replace(tmp_with_thumb, path)
+        thumb_path.unlink(missing_ok=True)
+        return True
+    except Exception as err:
+        _LOGGER.error("Failed to embed thumbnail in %s: %s", path, err)
+        if tmp_with_thumb.exists():
+            tmp_with_thumb.unlink()
+        if thumb_path.exists():
+            thumb_path.unlink()
+        return False
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Media Downloader from a config entry."""
     hass.data.setdefault(DOMAIN, {})
 
-    # Forward setup to sensor platform
     hass.async_create_task(
         hass.config_entries.async_forward_entry_setups(entry, ["sensor"])
     )
@@ -135,8 +173,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             entry.options.get(CONF_OVERWRITE, entry.data.get(CONF_OVERWRITE, DEFAULT_OVERWRITE))
         )
         return (download_dir, overwrite)
-
-    # --------------------- Servicio principal: descargar archivo ---------------------
 
     async def _async_download(call: ServiceCall) -> None:
         url: str = call.data[ATTR_URL]
@@ -210,92 +246,56 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             else:
                 os.rename(tmp_path, dest_path)
 
-            # Fire download completed event
             hass.bus.async_fire(
                 "media_downloader_download_completed",
-                {
-                    "url": url,
-                    "path": str(dest_path),
-                    "resized": resize_enabled,
-                },
+                {"url": url, "path": str(dest_path), "resized": resize_enabled},
             )
 
-            # Si no hay resize -> job_completed aquí mismo
-            if not resize_enabled:
-                hass.bus.async_fire(
-                    "media_downloader_job_completed",
-                    {
-                        "url": url,
-                        "path": str(dest_path),
-                        "resized": False,
-                    },
-                )
-
-            if resize_enabled and dest_path.suffix.lower() in [".mp4", ".mov", ".mkv", ".avi"]:
-                sensor.start_process(PROCESS_RESIZING)
-                try:
-                    w, h = _get_video_dimensions(dest_path)
-                    if w != resize_width or h != resize_height:
-                        if _resize_video(dest_path, resize_width, resize_height):
-                            hass.bus.async_fire(
-                                "media_downloader_resize_completed",
-                                {
-                                    "path": str(dest_path),
-                                    "width": resize_width,
-                                    "height": resize_height,
-                                },
-                            )
-                            hass.bus.async_fire(
-                                "media_downloader_job_completed",
-                                {
-                                    "url": url,
-                                    "path": str(dest_path),
-                                    "resized": True,
-                                },
-                            )
+            if dest_path.suffix.lower() in [".mp4", ".mov", ".mkv", ".avi"]:
+                # Opcional resize
+                if resize_enabled:
+                    sensor.start_process(PROCESS_RESIZING)
+                    try:
+                        w, h = _get_video_dimensions(dest_path)
+                        if w != resize_width or h != resize_height:
+                            if _resize_video(dest_path, resize_width, resize_height):
+                                hass.bus.async_fire(
+                                    "media_downloader_resize_completed",
+                                    {"path": str(dest_path), "width": resize_width, "height": resize_height},
+                                )
+                            else:
+                                hass.bus.async_fire(
+                                    "media_downloader_resize_failed",
+                                    {"path": str(dest_path), "width": resize_width, "height": resize_height},
+                                )
                         else:
                             hass.bus.async_fire(
-                                "media_downloader_resize_failed",
-                                {
-                                    "path": str(dest_path),
-                                    "width": resize_width,
-                                    "height": resize_height,
-                                },
+                                "media_downloader_resize_completed",
+                                {"path": str(dest_path), "width": resize_width, "height": resize_height},
                             )
-                    else:
-                        # Already correct size
-                        hass.bus.async_fire(
-                            "media_downloader_resize_completed",
-                            {
-                                "path": str(dest_path),
-                                "width": resize_width,
-                                "height": resize_height,
-                            },
-                        )
-                        hass.bus.async_fire(
-                            "media_downloader_job_completed",
-                            {
-                                "url": url,
-                                "path": str(dest_path),
-                                "resized": True,
-                            },
-                        )
-                finally:
-                    sensor.end_process(PROCESS_RESIZING)
+                    finally:
+                        sensor.end_process(PROCESS_RESIZING)
+
+                # Siempre agregar thumbnail
+                _add_thumbnail(dest_path)
+
+                hass.bus.async_fire(
+                    "media_downloader_job_completed",
+                    {"url": url, "path": str(dest_path), "resized": resize_enabled, "thumbnail": True},
+                )
+            else:
+                hass.bus.async_fire(
+                    "media_downloader_job_completed",
+                    {"url": url, "path": str(dest_path), "resized": resize_enabled, "thumbnail": False},
+                )
 
         except Exception as err:
             hass.bus.async_fire(
-                "media_downloader_download_failed",
-                {
-                    "url": url,
-                    "error": str(err),
-                },
+                "media_downloader_download_failed", {"url": url, "error": str(err)}
             )
             raise
         finally:
             sensor.end_process(PROCESS_DOWNLOADING)
-
-    # --------------------- Servicio: eliminar un archivo ---------------------
 
     async def _async_delete_file(call: ServiceCall) -> None:
         path_str: str = call.data.get(ATTR_PATH)
@@ -317,8 +317,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 raise HomeAssistantError(f"Not a file: {path}")
         finally:
             sensor.end_process(PROCESS_FILE_DELETING)
-
-    # --------------------- Servicio: eliminar todos los archivos de un directorio ---------------------
 
     async def _async_delete_directory(call: ServiceCall) -> None:
         dir_str: str = call.data.get(ATTR_PATH)
@@ -345,8 +343,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     pass
         finally:
             sensor.end_process(PROCESS_DIR_DELETING)
-
-    # --------------------- Registro de servicios ---------------------
 
     hass.services.async_register(
         DOMAIN,
