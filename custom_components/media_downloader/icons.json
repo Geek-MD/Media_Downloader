@@ -1,13 +1,7 @@
 {
   "services": {
-    "download_file": {
-      "service": "mdi:download"
-    },
-    "delete_file": {
-      "service": "mdi:file-remove"
-    },
-    "delete_files_in_directory": {
-      "service": "mdi:folder-remove"
-    }
+    "download_file": "mdi:download",
+    "delete_file": "mdi:file-remove",
+    "delete_files_in_directory": "mdi:folder-remove"
   }
 }
