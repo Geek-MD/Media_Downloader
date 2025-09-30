@@ -32,7 +32,7 @@
 ## Requirements
 - Home Assistant 2024.1.0 or newer.
 - Valid writable directory for storing media files (e.g., `/media` or `/config/media`).
-- `ffmpeg` and `ffprobe` must be installed and available in the system path for video resizing, thumbnail generation, and dimension detection.
+- `ffmpeg` and `ffprobe` must be installed and available in the system path for video resizing, thumbnail embedding, and dimension detection.
 
 ---
 
