@@ -1,10 +1,7 @@
 download_file:
   name: Download file
-  description: >
-    Download a file to the configured directory with optional subdir and filename.
-    If the file is a video, a thumbnail will always be generated and embedded to ensure
-    correct previews in Telegram and other platforms. Optionally, the video can also
-    be resized to custom dimensions.
+  description: Download a file to the configured directory with optional subdir and filename.
+  icon: mdi:download
   fields:
     url:
       name: URL
@@ -46,9 +43,7 @@ download_file:
           mode: box
     resize_enabled:
       name: Resize video
-      description: >
-        Enable resizing if dimensions do not match width/height. Thumbnail generation
-        is always applied to videos, even if resizing is disabled.
+      description: Enable resizing if dimensions do not match width/height.
       required: false
       default: false
       selector:
@@ -77,6 +72,7 @@ download_file:
 delete_file:
   name: Delete file
   description: Delete a specific file from the configured base directory.
+  icon: mdi:file-remove
   fields:
     path:
       name: File path
@@ -89,6 +85,7 @@ delete_file:
 delete_files_in_directory:
   name: Delete files in directory
   description: Delete all files inside the specified directory.
+  icon: mdi:folder-remove
   fields:
     path:
       name: Directory path
