@@ -1,0 +1,13 @@
+{
+  "services": {
+    "download_file": {
+      "service": "mdi:download"
+    },
+    "delete_file": {
+      "service": "mdi:file-remove"
+    },
+    "delete_files_in_directory": {
+      "service": "mdi:folder-remove"
+    }
+  }
+}
