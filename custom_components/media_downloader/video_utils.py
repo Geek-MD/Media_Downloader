@@ -12,7 +12,7 @@ from homeassistant.exceptions import HomeAssistantError
 _LOGGER = logging.getLogger(__name__)
 
 
-# ------------------- Utilidades generales -------------------
+# ------------------- General utilities -------------------
 
 def _sanitize_filename(name: str) -> str:
     """Clean invalid characters from filename."""
@@ -35,7 +35,7 @@ def _guess_filename_from_url(url: str) -> str:
     return _sanitize_filename(tail or "downloaded_file")
 
 
-# ------------------- Procesamiento de video -------------------
+# ------------------- Video processing -------------------
 
 def _get_video_dimensions(path: Path) -> tuple[int, int]:
     """Return video dimensions (width, height) using ffprobe with ffmpeg fallback."""
@@ -70,7 +70,7 @@ def _get_video_dimensions(path: Path) -> tuple[int, int]:
 
 
 def _resize_video(path: Path, width: int, height: int) -> bool:
-    """Resize video to given width and height."""
+    """Resize video to given width and height, enforcing SAR and DAR."""
     tmp_resized = path.with_suffix(".resized" + path.suffix)
     cmd = [
         "ffmpeg", "-y", "-i", str(path),
@@ -114,7 +114,7 @@ def _embed_thumbnail(path: Path) -> bool:
 
 
 def _postprocess_video(path: Path) -> bool:
-    """Normalize video stream to fix display/aspect ratio issues."""
+    """Re-encode video to normalize SAR and ensure proper display aspect ratio."""
     tmp_fixed = path.with_suffix(".fixed" + path.suffix)
     try:
         cmd = [
