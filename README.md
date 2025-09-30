@@ -1,46 +1,51 @@
-[![Geek-MD - HA Daily Counter](https://img.shields.io/static/v1?label=Geek-MD&message=HA%20Daily%20Counter&color=blue&logo=github)](https://github.com/Geek-MD/HA_Daily_Counter)
-[![Stars](https://img.shields.io/github/stars/Geek-MD/HA_Daily_Counter?style=social)](https://github.com/Geek-MD/HA_Daily_Counter)
-[![Forks](https://img.shields.io/github/forks/Geek-MD/HA_Daily_Counter?style=social)](https://github.com/Geek-MD/HA_Daily_Counter)
+[![Geek-MD - Media Downloader](https://img.shields.io/static/v1?label=Geek-MD&message=Media%20Downloader&color=blue&logo=github)](https://github.com/Geek-MD/Media_Downloader)
+[![Stars](https://img.shields.io/github/stars/Geek-MD/Media_Downloader?style=social)](https://github.com/Geek-MD/Media_Downloader)
+[![Forks](https://img.shields.io/github/forks/Geek-MD/Media_Downloader?style=social)](https://github.com/Geek-MD/Media_Downloader)
 
-[![GitHub Release](https://img.shields.io/github/release/Geek-MD/HA_Daily_Counter?include_prereleases&sort=semver&color=blue)](https://github.com/Geek-MD/HA_Daily_Counter/releases)
+[![GitHub Release](https://img.shields.io/github/release/Geek-MD/Media_Downloader?include_prereleases&sort=semver&color=blue)](https://github.com/Geek-MD/Media_Downloader/releases)
 [![License](https://img.shields.io/badge/License-MIT-blue)](#license)
 ![HACS Custom Repository](https://img.shields.io/badge/HACS-Custom%20Repository-blue)
-[![Ruff](https://github.com/Geek-MD/HA_Daily_Counter/actions/workflows/ci.yaml/badge.svg?branch=main&label=Ruff)](https://github.com/Geek-MD/HA_Daily_Counter/actions/workflows/ci.yaml)
+[![Ruff](https://github.com/Geek-MD/Media_Downloader/actions/workflows/ci.yaml/badge.svg?branch=main&label=Ruff)](https://github.com/Geek-MD/Media_Downloader/actions/workflows/ci.yaml)
 
-<img width="200" height="200" alt="icon" src="https://github.com/user-attachments/assets/028786f5-7c8e-4a18-9baa-23002cd368c0" />
+<img width="200" height="200" alt="image" src="https://github.com/user-attachments/assets/ce757339-db91-4343-b6b9-0e3ee610d3f2" />
 
-# HA Daily Counter
+# Media Downloader
 
-**HA Daily Counter** is a custom Home Assistant integration to create **daily-resettable counters**, useful for tracking repetitive events such as door openings, light switches, or sensor activations.
+**Media Downloader** is a custom Home Assistant integration to manage media files directly from Home Assistant through simple services.
 
 ---
 
 ## Features
-- Create multiple counters with custom names.
-- Increment counters when a trigger entity reaches a defined state.
-- Automatic reset every day at **00:00 local time**.
-- Persistent values across Home Assistant restarts.
-- Fully managed through the UI (no YAML needed).
-- Exposed as devices with `sensor` entities using the `mdi:counter` icon.
-- Two custom services: reset a counter or set a specific value manually.
+- Download files from any URL directly into a configured folder.
+- Optional subdirectories and custom filenames.
+- Overwrite policy (default or per call).
+- Delete a single file or all files in a directory via services.
+- Automatic **thumbnail embedding** into all downloaded videos (fixes Telegram square video issue).
+- Optional video resize subprocess during download (width/height).
+- Robust detection of video dimensions using `ffprobe` (JSON) with `ffmpeg -i` fallback.
+- Persistent status sensor (`sensor.media_downloader_status`) to track operations (`idle` / `working`).
+- Event support for download, resize, job completion, and thumbnail.
+- Works with Home Assistant automations and scripts.
 
 ---
 
 ## Requirements
-- Home Assistant 2024.6.0 or newer.
+- Home Assistant 2024.1.0 or newer.
+- Valid writable directory for storing media files (e.g., `/media` or `/config/media`).
+- `ffmpeg` and `ffprobe` must be installed and available in the system path for video resizing, thumbnail embedding, and dimension detection.
 
 ---
 
 ## Installation
 
 ### Option 1: Manual installation
-1. Download the latest release from [GitHub](https://github.com/Geek-MD/HA_Daily_Counter/releases).
-2. Copy the `ha_daily_counter` folder into:
+1. Download the latest release from [GitHub](https://github.com/Geek-MD/Media_Downloader/releases).
+2. Copy the `media_downloader` folder into:
    ```
-   /config/custom_components/ha_daily_counter/
+   /config/custom_components/media_downloader/
    ```
 3. Restart Home Assistant.
-4. Add the integration from **Settings → Devices & Services → Add Integration → HA Daily Counter**.
+4. Add the integration from **Settings → Devices & Services → Add Integration → Media Downloader**.
 
 ---
 
@@ -48,80 +53,136 @@
 1. Go to **HACS → Integrations → Custom Repositories**.
 2. Add the repository URL:  
    ```
-   https://github.com/Geek-MD/HA_Daily_Counter
+   https://github.com/Geek-MD/Media_Downloader
    ```
 3. Select category **Integration**.
-4. Search for **HA Daily Counter** in HACS and install it.
+4. Search for **Media Downloader** in HACS and install it.
 5. Restart Home Assistant.
-6. Add the integration from **Settings → Devices & Services → Add Integration → HA Daily Counter**.
+6. Add the integration from **Settings → Devices & Services → Add Integration → Media Downloader**.
 
 ---
 
 ## Configuration
-When adding a new counter:
-- **Name**: Friendly name for the counter.
-- **Trigger Entity**: Select a sensor or helper entity to watch.
-- **Trigger State**: Choose from the available states of that entity.
+When adding the integration:
+- **Base download directory**: Absolute path where files will be saved.
+- **Overwrite**: Whether existing files should be replaced by default.
+- **Default file delete path**: Optional, used if no path is passed to the `delete_file` service.
+- **Default directory delete path**: Optional, used if no path is passed to the `delete_files_in_directory` service.
 
-👉 If you need to configure multiple triggers, first create a **group helper** and use that helper as the trigger.
+You can change these settings later using the integration options.
 
 ---
 
 ## Services
 
-### 1. `ha_daily_counter.reset_counter`
-Resets a counter back to zero.
+### 1. `media_downloader.download_file`
+Downloads a file from the specified URL.  
+If the file is a video, a **thumbnail will always be embedded** after download.  
+If `resize_enabled` is true, the integration will check the dimensions and resize the file if they do not match `resize_width` and `resize_height`.
 
 #### Service Data
-| Field       | Required | Description                              |
-|-------------|----------|------------------------------------------|
-| `entity_id` | yes      | Entity ID of the counter to reset.       |
+| Field           | Required | Description                                                                 |
+|-----------------|----------|-----------------------------------------------------------------------------|
+| `url`           | yes      | File URL to download.                                                       |
+| `subdir`        | no       | Optional subfolder under base directory.                                    |
+| `filename`      | no       | Optional filename (otherwise auto-detect).                                  |
+| `overwrite`     | no       | Override default overwrite policy.                                          |
+| `timeout`       | no       | Download timeout in seconds (default 300).                                  |
+| `resize_enabled`| no       | If true, verify and resize video to the specified width/height.             |
+| `resize_width`  | no       | Target width for resize (default 640).                                      |
+| `resize_height` | no       | Target height for resize (default 360).                                     |
 
-#### Example
-```yaml
-- service: ha_daily_counter.reset_counter
-  target:
-    entity_id: sensor.door_counter
+#### Example:
 ```
-
----
-
-### 2. `ha_daily_counter.set_counter`
-Sets a counter to a specific integer value.
-
-#### Service Data
-| Field       | Required | Description                              |
-|-------------|----------|------------------------------------------|
-| `entity_id` | yes      | Entity ID of the counter to set.         |
-| `value`     | yes      | Integer value to assign to the counter.  |
-
-#### Example
-```yaml
-- service: ha_daily_counter.set_counter
+- service: media_downloader.download_file
   data:
-    entity_id: sensor.door_counter
-    value: 42
+    url: "https://example.com/video.mp4"
+    subdir: "ring"
+    filename: "video.mp4"
+    resize_enabled: true
+    resize_width: 640
+    resize_height: 360
 ```
 
 ---
 
-## Example Use Cases
-- Count how many times the **front door** opened today.
-- Track how many times a **light** was turned on.
-- Monitor **motion sensor activations**.
-- Combine with automations to trigger actions when thresholds are reached.
+### 2. `media_downloader.delete_file`
+Deletes the specified file if it exists.  
+If `path` is not provided, the default path configured in the UI will be used.
+
+#### Service Data
+| Field  | Required | Description                                |
+|---------|----------|--------------------------------------------|
+| `path`  | no       | Absolute path to the file (overrides UI). |
 
 ---
 
-## Icon Curiosity
-Why does the icon show the number **28**?  
-Because 28 is a **perfect number**.  
+### 3. `media_downloader.delete_files_in_directory`
+Deletes all files inside the specified directory.  
+If `path` is not provided, the default directory configured in the UI will be used.
 
-👉 A perfect number is a positive integer equal to the sum of its proper divisors.  
-For 28, the divisors are:  
-`1 + 2 + 4 + 7 + 14 = 28`  
+#### Service Data
+| Field  | Required | Description                                        |
+|---------|----------|----------------------------------------------------|
+| `path`  | no       | Absolute path to the directory (overrides UI).     |
 
-Mathematics, beauty, and poetry.
+---
+
+## Sensor
+
+The integration creates a persistent sensor called **`sensor.media_downloader_status`**.  
+
+### State
+- `idle`: No active processes.  
+- `working`: At least one process running (download, resize, delete).  
+
+### Attributes
+| Attribute          | Description                                                             |
+|--------------------|-------------------------------------------------------------------------|
+| `last_changed`     | Datetime when the state last changed.                                   |
+| `subprocess`       | Name of the current subprocess (`downloading`, `resizing`, `file_deleting`, `dir_deleting`). |
+| `active_processes` | List of all subprocesses currently running (supports chained processes). |
+
+---
+
+## Events
+
+Available events:
+
+| Event Name                           | Triggered When                                 | Data Fields                                                |
+|--------------------------------------|-----------------------------------------------|------------------------------------------------------------|
+| `media_downloader_download_completed`| A download finished successfully.              | `url`, `path`, `resized`, `thumbnail`                      |
+| `media_downloader_download_failed`   | A download failed.                             | `url`, `error`                                             |
+| `media_downloader_resize_completed`  | A resize finished successfully.                | `path`, `width`, `height`, `thumbnail`                     |
+| `media_downloader_resize_failed`     | A resize failed.                               | `path`, `width`, `height`, `thumbnail`                     |
+| `media_downloader_job_completed`     | A full job (download + optional resize + thumbnail) is complete. | `url`, `path`, `resized`, `thumbnail` |
+
+---
+
+## Example Automations
+
+### Wait for job completion
+```
+- service: media_downloader.download_file
+  data:
+    url: "https://example.com/file.mp4"
+    subdir: "ring"
+    filename: "video.mp4"
+    resize_enabled: true
+    resize_width: 640
+    resize_height: 360
+
+- wait_for_trigger:
+    - platform: event
+      event_type: media_downloader_job_completed
+  timeout: "00:05:00"
+  continue_on_timeout: true
+
+- service: telegram_bot.send_message
+  data:
+    target: -123456789
+    message: "Media Downloader job completed with thumbnail."
+```
 
 ---
 
