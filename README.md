@@ -21,8 +21,9 @@
 - Overwrite policy (default or per call).
 - Delete a single file or all files in a directory via services.
 - Automatic **thumbnail embedding** into all downloaded videos (fixes Telegram square video issue).
+- **Robust video postprocessing** step (`ffmpeg setsar=1`) to normalize aspect ratio across all platforms.
 - Optional video resize subprocess during download (width/height).
-- Robust detection of video dimensions using `ffprobe` (JSON) with `ffmpeg -i` fallback.
+- Reliable detection of video dimensions using `ffprobe` (JSON) with `ffmpeg -i` fallback.
 - Persistent status sensor (`sensor.media_downloader_status`) to track operations (`idle` / `working`).
 - Event support for download, resize, job completion, and thumbnail.
 - Works with Home Assistant automations and scripts.
@@ -32,7 +33,7 @@
 ## Requirements
 - Home Assistant 2024.1.0 or newer.
 - Valid writable directory for storing media files (e.g., `/media` or `/config/media`).
-- `ffmpeg` and `ffprobe` must be installed and available in the system path for video resizing, thumbnail embedding, and dimension detection.
+- `ffmpeg` and `ffprobe` must be installed and available in the system path for video resizing, thumbnail generation, dimension detection, and postprocessing.
 
 ---
 
@@ -77,8 +78,10 @@ You can change these settings later using the integration options.
 
 ### 1. `media_downloader.download_file`
 Downloads a file from the specified URL.  
-If the file is a video, a **thumbnail will always be embedded** after download.  
-If `resize_enabled` is true, the integration will check the dimensions and resize the file if they do not match `resize_width` and `resize_height`.
+If the file is a video:
+- A **thumbnail will always be embedded** after download.  
+- A **postprocessing step** will always normalize aspect ratio using `ffmpeg setsar=1`.  
+- If `resize_enabled` is true, the video will also be resized to match the specified width/height.  
 
 #### Service Data
 | Field           | Required | Description                                                                 |
@@ -155,7 +158,7 @@ Available events:
 | `media_downloader_download_failed`   | A download failed.                             | `url`, `error`                                             |
 | `media_downloader_resize_completed`  | A resize finished successfully.                | `path`, `width`, `height`, `thumbnail`                     |
 | `media_downloader_resize_failed`     | A resize failed.                               | `path`, `width`, `height`, `thumbnail`                     |
-| `media_downloader_job_completed`     | A full job (download + optional resize + thumbnail) is complete. | `url`, `path`, `resized`, `thumbnail` |
+| `media_downloader_job_completed`     | A full job (download + optional resize + thumbnail + postprocess) is complete. | `url`, `path`, `resized`, `thumbnail` |
 
 ---
 
@@ -181,7 +184,7 @@ Available events:
 - service: telegram_bot.send_message
   data:
     target: -123456789
-    message: "Media Downloader job completed with thumbnail."
+    message: "Media Downloader job completed with thumbnail and postprocessing."
 ```
 
 ---
