@@ -20,19 +20,22 @@
 - Optional subdirectories and custom filenames.
 - Overwrite policy (default or per call).
 - Delete a single file or all files in a directory via services.
-- Automatic **thumbnail embedding** into all downloaded videos (fixes Telegram square video issue).
-- Optional video resize subprocess during download (width/height).
-- Robust detection of video dimensions using `ffprobe` (JSON) with `ffmpeg -i` fallback.
+- Automatic **video postprocessing** to fix Telegram’s square preview issue.
+  - Removes old attached thumbnails.
+  - Ensures square pixels (SAR=1) and correct aspect ratio (DAR).
+  - Embeds a new clean thumbnail extracted from the video itself.
+- Optional video resizing (width/height).
+- Robust detection of video dimensions using `ffprobe` with `ffmpeg -i` fallback.
 - Persistent status sensor (`sensor.media_downloader_status`) to track operations (`idle` / `working`).
-- Event support for download, resize, job completion, and thumbnail.
-- Works with Home Assistant automations and scripts.
+- Full event support for download, resize, thumbnail, and job completion.
+- Works seamlessly with Home Assistant automations and scripts.
 
 ---
 
 ## Requirements
 - Home Assistant 2024.1.0 or newer.
 - Valid writable directory for storing media files (e.g., `/media` or `/config/media`).
-- `ffmpeg` and `ffprobe` must be installed and available in the system path for video resizing, thumbnail embedding, and dimension detection.
+- `ffmpeg` and `ffprobe` must be installed and available in the system path for video processing.
 
 ---
 
@@ -77,8 +80,10 @@ You can change these settings later using the integration options.
 
 ### 1. `media_downloader.download_file`
 Downloads a file from the specified URL.  
-If the file is a video, a **thumbnail will always be embedded** after download.  
-If `resize_enabled` is true, the integration will check the dimensions and resize the file if they do not match `resize_width` and `resize_height`.
+If the file is a video:
+- A **thumbnail is always embedded** after download.
+- If `resize_enabled` is true, the integration will resize the video to the specified `resize_width` and `resize_height`.
+- Applies a **Telegram-safe fix** to preserve correct display aspect ratio.
 
 #### Service Data
 | Field           | Required | Description                                                                 |
@@ -93,7 +98,7 @@ If `resize_enabled` is true, the integration will check the dimensions and resiz
 | `resize_height` | no       | Target height for resize (default 360).                                     |
 
 #### Example:
-```
+```yaml
 - service: media_downloader.download_file
   data:
     url: "https://example.com/video.mp4"
@@ -110,10 +115,12 @@ If `resize_enabled` is true, the integration will check the dimensions and resiz
 Deletes the specified file if it exists.  
 If `path` is not provided, the default path configured in the UI will be used.
 
-#### Service Data
-| Field  | Required | Description                                |
-|---------|----------|--------------------------------------------|
-| `path`  | no       | Absolute path to the file (overrides UI). |
+#### Example:
+```yaml
+- service: media_downloader.delete_file
+  data:
+    path: "/media/ring/video.mp4"
+```
 
 ---
 
@@ -121,10 +128,12 @@ If `path` is not provided, the default path configured in the UI will be used.
 Deletes all files inside the specified directory.  
 If `path` is not provided, the default directory configured in the UI will be used.
 
-#### Service Data
-| Field  | Required | Description                                        |
-|---------|----------|----------------------------------------------------|
-| `path`  | no       | Absolute path to the directory (overrides UI).     |
+#### Example:
+```yaml
+- service: media_downloader.delete_files_in_directory
+  data:
+    path: "/media/ring"
+```
 
 ---
 
@@ -147,22 +156,19 @@ The integration creates a persistent sensor called **`sensor.media_downloader_st
 
 ## Events
 
-Available events:
-
-| Event Name                           | Triggered When                                 | Data Fields                                                |
-|--------------------------------------|-----------------------------------------------|------------------------------------------------------------|
-| `media_downloader_download_completed`| A download finished successfully.              | `url`, `path`, `resized`, `thumbnail`                      |
-| `media_downloader_download_failed`   | A download failed.                             | `url`, `error`                                             |
-| `media_downloader_resize_completed`  | A resize finished successfully.                | `path`, `width`, `height`, `thumbnail`                     |
-| `media_downloader_resize_failed`     | A resize failed.                               | `path`, `width`, `height`, `thumbnail`                     |
-| `media_downloader_job_completed`     | A full job (download + optional resize + thumbnail) is complete. | `url`, `path`, `resized`, `thumbnail` |
+| Event Name                           | Triggered When                                 | Data Fields                                  |
+|--------------------------------------|-----------------------------------------------|----------------------------------------------|
+| `media_downloader_download_completed`| A download finished successfully.              | `url`, `path`, `resized`, `thumbnail`        |
+| `media_downloader_download_failed`   | A download failed.                             | `url`, `error`                               |
+| `media_downloader_resize_completed`  | A resize finished successfully.                | `path`, `width`, `height`, `thumbnail`       |
+| `media_downloader_resize_failed`     | A resize failed.                               | `path`, `width`, `height`, `thumbnail`       |
+| `media_downloader_job_completed`     | A full job (download + resize + thumbnail fix) is complete. | `url`, `path`, `resized`, `thumbnail` |
 
 ---
 
-## Example Automations
+## Example Automation
 
-### Wait for job completion
-```
+```yaml
 - service: media_downloader.download_file
   data:
     url: "https://example.com/file.mp4"
@@ -181,7 +187,7 @@ Available events:
 - service: telegram_bot.send_message
   data:
     target: -123456789
-    message: "Media Downloader job completed with thumbnail."
+    message: "Media Downloader job completed with Telegram aspect fix applied."
 ```
 
 ---
