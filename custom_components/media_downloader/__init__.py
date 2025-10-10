@@ -1,17 +1,16 @@
+"""Main logic for Media Downloader integration."""
+
 from __future__ import annotations
 
 import os
 import re
-import subprocess
-import json
+import async_timeout
+import aiohttp
 import logging
 from pathlib import Path
 from typing import Optional
 
-import aiohttp
 import voluptuous as vol
-import async_timeout
-
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.helpers import aiohttp_client, config_validation as cv
@@ -42,118 +41,18 @@ from .const import (
     PROCESS_DIR_DELETING,
 )
 
-PLATFORMS: list[str] = ["sensor"]
+from .video_utils import (
+    sanitize_filename,
+    guess_filename_from_url,
+    ensure_within_base,
+    normalize_video_aspect,
+    embed_thumbnail,
+    resize_video,
+    get_video_dimensions,
+)
+
 _LOGGER = logging.getLogger(__name__)
-
-
-def _sanitize_filename(name: str) -> str:
-    name = name.strip()
-    name = re.sub(r"[\\/:*?\"<>|\r\n\t]", "_", name)
-    return name or "downloaded_file"
-
-
-def _ensure_within_base(base: Path, target: Path) -> None:
-    try:
-        target.relative_to(base)
-    except Exception:
-        raise HomeAssistantError(f"Path outside allowed base directory: {target}")
-
-
-def _guess_filename_from_url(url: str) -> str:
-    tail = url.split("?")[0].rstrip("/").split("/")[-1]
-    return _sanitize_filename(tail or "downloaded_file")
-
-
-def _get_video_dimensions(path: Path) -> tuple[int, int]:
-    """Return video dimensions (width, height) using ffprobe and fallback to ffmpeg -i."""
-    try:
-        cmd = [
-            "ffprobe", "-v", "error",
-            "-select_streams", "v:0",
-            "-show_entries", "stream=width,height",
-            "-of", "json", str(path)
-        ]
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        data = json.loads(result.stdout)
-        streams = data.get("streams", [])
-        if streams:
-            width = int(streams[0].get("width", 0))
-            height = int(streams[0].get("height", 0))
-            if width > 0 and height > 0:
-                return width, height
-    except Exception as err:
-        _LOGGER.warning("ffprobe failed to get dimensions for %s: %s", path, err)
-
-    try:
-        cmd = ["ffmpeg", "-i", str(path)]
-        result = subprocess.run(cmd, capture_output=True, text=True, check=False)
-        match = re.search(r",\s*(\d{2,5})x(\d{2,5})", result.stderr)
-        if match:
-            return int(match.group(1)), int(match.group(2))
-    except Exception as err:
-        _LOGGER.warning("ffmpeg fallback failed for %s: %s", path, err)
-
-    return (0, 0)
-
-
-def _resize_video(path: Path, width: int, height: int) -> bool:
-    tmp_resized = path.with_suffix(".resized" + path.suffix)
-    cmd = [
-        "ffmpeg", "-y", "-i", str(path),
-        "-vf", f"scale={width}:{height}",
-        "-c:a", "copy",
-        str(tmp_resized)
-    ]
-    try:
-        subprocess.run(cmd, check=True)
-        os.replace(tmp_resized, path)
-        return True
-    except Exception as err:
-        _LOGGER.error("Resize failed for %s: %s", path, err)
-        if tmp_resized.exists():
-            tmp_resized.unlink()
-        return False
-
-
-def _add_thumbnail(path: Path) -> bool:
-    """Generate and embed a thumbnail to ensure Telegram preview is correct."""
-    thumb_path = path.with_suffix(".thumb.jpg")
-    tmp_with_thumb = path.with_suffix(".withthumb" + path.suffix)
-    try:
-        # Generate thumbnail at 1 second into the video
-        subprocess.run(
-            [
-                "ffmpeg", "-y", "-i", str(path), "-ss", "00:00:01", "-vframes", "1",
-                str(thumb_path),
-            ],
-            check=True,
-        )
-
-        # Get video dimensions to embed with correct aspect ratio
-        w, h = _get_video_dimensions(path)
-        if w == 0 or h == 0:
-            w, h = 640, 360  # fallback default
-
-        subprocess.run(
-            [
-                "ffmpeg", "-y", "-i", str(path), "-i", str(thumb_path),
-                "-map", "0", "-map", "1", "-c", "copy",
-                "-disposition:v:1", "attached_pic",
-                str(tmp_with_thumb),
-            ],
-            check=True,
-        )
-
-        os.replace(tmp_with_thumb, path)
-        thumb_path.unlink(missing_ok=True)
-        return True
-    except Exception as err:
-        _LOGGER.error("Failed to embed thumbnail in %s: %s", path, err)
-        if tmp_with_thumb.exists():
-            tmp_with_thumb.unlink()
-        if thumb_path.exists():
-            thumb_path.unlink()
-        return False
+PLATFORMS: list[str] = ["sensor"]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -174,6 +73,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
         return (download_dir, overwrite)
 
+    # ----------------------------------------------------------
+    # 📥 Download file
+    # ----------------------------------------------------------
+
     async def _async_download(call: ServiceCall) -> None:
         url: str = call.data[ATTR_URL]
         subdir: Optional[str] = call.data.get(ATTR_SUBDIR)
@@ -188,133 +91,102 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         base_dir, default_overwrite = _get_config()
         base_dir = base_dir.resolve()
 
-        if subdir:
-            safe_subdir = Path(_sanitize_filename(subdir))
-            dest_dir = (base_dir / safe_subdir).resolve()
-        else:
-            dest_dir = base_dir
-
-        _ensure_within_base(base_dir, dest_dir)
+        dest_dir = base_dir / sanitize_filename(subdir or "")
+        ensure_within_base(base_dir, dest_dir)
         dest_dir.mkdir(parents=True, exist_ok=True)
 
-        final_name = _sanitize_filename(filename) if filename else _guess_filename_from_url(url)
+        final_name = sanitize_filename(filename) if filename else guess_filename_from_url(url)
         dest_path = (dest_dir / final_name).resolve()
-        _ensure_within_base(base_dir, dest_path)
+        ensure_within_base(base_dir, dest_path)
 
         do_overwrite = default_overwrite if overwrite is None else bool(overwrite)
+
+        sensor = hass.data[DOMAIN]["status_sensor"]
+        sensor.start_process(PROCESS_DOWNLOADING)
 
         session: aiohttp.ClientSession = aiohttp_client.async_get_clientsession(hass)
         tmp_path = dest_path.with_suffix(dest_path.suffix + ".part")
 
         if tmp_path.exists():
-            try:
-                tmp_path.unlink()
-            except Exception:
-                pass
-
-        sensor = hass.data[DOMAIN]["status_sensor"]
-        sensor.start_process(PROCESS_DOWNLOADING)
+            tmp_path.unlink(missing_ok=True)
 
         try:
             async with async_timeout.timeout(timeout_sec):
                 async with session.get(url) as resp:
                     if resp.status != 200:
-                        raise HomeAssistantError(f"HTTP error {resp.status} while downloading: {url}")
-
-                    if not filename:
-                        cd = resp.headers.get("Content-Disposition") or resp.headers.get("content-disposition")
-                        if cd:
-                            m = re.search(r'filename\*=.*?\'\'([^;]+)|filename="?([^";]+)"?', cd)
-                            if m:
-                                candidate = m.group(1) or m.group(2)
-                                if candidate:
-                                    final_name_cd = _sanitize_filename(candidate)
-                                    dest_path = (dest_dir / final_name_cd).resolve()
-                                    _ensure_within_base(base_dir, dest_path)
-                                    tmp_path = dest_path.with_suffix(dest_path.suffix + ".part")
-
-                    if dest_path.exists() and not do_overwrite:
-                        raise HomeAssistantError(f"File already exists and overwrite=false: {dest_path}")
-
+                        raise HomeAssistantError(f"HTTP error {resp.status}: {url}")
                     with open(tmp_path, "wb") as f:
                         async for chunk in resp.content.iter_chunked(1024 * 64):
                             if chunk:
                                 f.write(chunk)
 
-            if dest_path.exists() and do_overwrite:
-                os.replace(tmp_path, dest_path)
-            else:
-                os.rename(tmp_path, dest_path)
+            if dest_path.exists() and not do_overwrite:
+                raise HomeAssistantError(f"File exists and overwrite is False: {dest_path}")
 
-            hass.bus.async_fire(
-                "media_downloader_download_completed",
-                {"url": url, "path": str(dest_path), "resized": resize_enabled},
-            )
+            os.replace(tmp_path, dest_path)
 
-            if dest_path.suffix.lower() in [".mp4", ".mov", ".mkv", ".avi"]:
-                # Opcional resize
-                if resize_enabled:
+            hass.bus.async_fire("media_downloader_download_completed", {
+                "url": url, "path": str(dest_path)
+            })
+
+            # Always normalize aspect and embed thumbnail
+            if normalize_video_aspect(dest_path):
+                hass.bus.async_fire("media_downloader_aspect_normalized", {
+                    "path": str(dest_path)
+                })
+
+            if embed_thumbnail(dest_path):
+                hass.bus.async_fire("media_downloader_thumbnail_embedded", {
+                    "path": str(dest_path)
+                })
+
+            # Optional resize
+            if resize_enabled and dest_path.suffix.lower() in [".mp4", ".mov", ".mkv", ".avi"]:
+                w, h = get_video_dimensions(dest_path)
+                if w != resize_width or h != resize_height:
                     sensor.start_process(PROCESS_RESIZING)
-                    try:
-                        w, h = _get_video_dimensions(dest_path)
-                        if w != resize_width or h != resize_height:
-                            if _resize_video(dest_path, resize_width, resize_height):
-                                hass.bus.async_fire(
-                                    "media_downloader_resize_completed",
-                                    {"path": str(dest_path), "width": resize_width, "height": resize_height},
-                                )
-                            else:
-                                hass.bus.async_fire(
-                                    "media_downloader_resize_failed",
-                                    {"path": str(dest_path), "width": resize_width, "height": resize_height},
-                                )
-                        else:
-                            hass.bus.async_fire(
-                                "media_downloader_resize_completed",
-                                {"path": str(dest_path), "width": resize_width, "height": resize_height},
-                            )
-                    finally:
-                        sensor.end_process(PROCESS_RESIZING)
+                    if resize_video(dest_path, resize_width, resize_height):
+                        hass.bus.async_fire("media_downloader_resize_completed", {
+                            "path": str(dest_path), "width": resize_width, "height": resize_height
+                        })
+                    else:
+                        hass.bus.async_fire("media_downloader_resize_failed", {
+                            "path": str(dest_path)
+                        })
+                    sensor.end_process(PROCESS_RESIZING)
 
-                # Siempre agregar thumbnail
-                _add_thumbnail(dest_path)
-
-                hass.bus.async_fire(
-                    "media_downloader_job_completed",
-                    {"url": url, "path": str(dest_path), "resized": resize_enabled, "thumbnail": True},
-                )
-            else:
-                hass.bus.async_fire(
-                    "media_downloader_job_completed",
-                    {"url": url, "path": str(dest_path), "resized": resize_enabled, "thumbnail": False},
-                )
+            hass.bus.async_fire("media_downloader_job_completed", {
+                "url": url, "path": str(dest_path)
+            })
 
         except Exception as err:
-            hass.bus.async_fire(
-                "media_downloader_download_failed", {"url": url, "error": str(err)}
-            )
-            raise
+            _LOGGER.error("Download failed: %s", err)
+            hass.bus.async_fire("media_downloader_download_failed", {
+                "url": url, "error": str(err)
+            })
         finally:
             sensor.end_process(PROCESS_DOWNLOADING)
+
+    # ----------------------------------------------------------
+    # 🗑️ Delete file / directory
+    # ----------------------------------------------------------
 
     async def _async_delete_file(call: ServiceCall) -> None:
         path_str: str = call.data.get(ATTR_PATH)
         if not path_str:
             path_str = entry.options.get(CONF_DELETE_FILE_PATH, "")
         if not path_str:
-            raise HomeAssistantError("No path provided for delete_file")
+            raise HomeAssistantError("No path provided")
 
         path = Path(path_str).resolve()
         base_dir, _ = _get_config()
-        _ensure_within_base(base_dir, path)
+        ensure_within_base(base_dir, path)
 
         sensor = hass.data[DOMAIN]["status_sensor"]
         sensor.start_process(PROCESS_FILE_DELETING)
         try:
             if path.is_file():
                 path.unlink()
-            else:
-                raise HomeAssistantError(f"Not a file: {path}")
         finally:
             sensor.end_process(PROCESS_FILE_DELETING)
 
@@ -323,43 +195,40 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if not dir_str:
             dir_str = entry.options.get(CONF_DELETE_DIR_PATH, "")
         if not dir_str:
-            raise HomeAssistantError("No path provided for delete_files_in_directory")
+            raise HomeAssistantError("No path provided")
 
         dir_path = Path(dir_str).resolve()
         base_dir, _ = _get_config()
-        _ensure_within_base(base_dir, dir_path)
+        ensure_within_base(base_dir, dir_path)
 
         sensor = hass.data[DOMAIN]["status_sensor"]
         sensor.start_process(PROCESS_DIR_DELETING)
         try:
-            if not dir_path.is_dir():
-                raise HomeAssistantError(f"Not a directory: {dir_path}")
-
-            for child in dir_path.iterdir():
-                try:
-                    if child.is_file():
-                        child.unlink()
-                except Exception:
-                    pass
+            if dir_path.is_dir():
+                for file in dir_path.iterdir():
+                    if file.is_file():
+                        file.unlink()
         finally:
             sensor.end_process(PROCESS_DIR_DELETING)
+
+    # ----------------------------------------------------------
+    # 🔧 Register services
+    # ----------------------------------------------------------
 
     hass.services.async_register(
         DOMAIN,
         SERVICE_DOWNLOAD_FILE,
         _async_download,
-        schema=vol.Schema(
-            {
-                vol.Required(ATTR_URL): cv.url,
-                vol.Optional(ATTR_SUBDIR): cv.string,
-                vol.Optional(ATTR_FILENAME): cv.string,
-                vol.Optional(ATTR_OVERWRITE): cv.boolean,
-                vol.Optional(ATTR_TIMEOUT): vol.Coerce(int),
-                vol.Optional(ATTR_RESIZE_ENABLED): cv.boolean,
-                vol.Optional(ATTR_RESIZE_WIDTH): vol.Coerce(int),
-                vol.Optional(ATTR_RESIZE_HEIGHT): vol.Coerce(int),
-            }
-        ),
+        schema=vol.Schema({
+            vol.Required(ATTR_URL): cv.url,
+            vol.Optional(ATTR_SUBDIR): cv.string,
+            vol.Optional(ATTR_FILENAME): cv.string,
+            vol.Optional(ATTR_OVERWRITE): cv.boolean,
+            vol.Optional(ATTR_TIMEOUT): vol.Coerce(int),
+            vol.Optional(ATTR_RESIZE_ENABLED): cv.boolean,
+            vol.Optional(ATTR_RESIZE_WIDTH): vol.Coerce(int),
+            vol.Optional(ATTR_RESIZE_HEIGHT): vol.Coerce(int),
+        }),
     )
 
     hass.services.async_register(
@@ -376,17 +245,4 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         schema=vol.Schema({vol.Optional(ATTR_PATH): cv.string}),
     )
 
-    async def _options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
-        await hass.config_entries.async_reload(entry.entry_id)
-
-    entry.async_on_unload(entry.add_update_listener(_options_updated))
-    return True
-
-
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Unload Media Downloader config entry."""
-    hass.services.async_remove(DOMAIN, SERVICE_DOWNLOAD_FILE)
-    hass.services.async_remove(DOMAIN, SERVICE_DELETE_FILE)
-    hass.services.async_remove(DOMAIN, SERVICE_DELETE_DIRECTORY)
-    await hass.config_entries.async_forward_entry_unload(entry, "sensor")
     return True
