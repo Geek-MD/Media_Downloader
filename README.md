@@ -7,7 +7,7 @@
 ![HACS Custom Repository](https://img.shields.io/badge/HACS-Custom%20Repository-blue)
 [![Ruff](https://github.com/Geek-MD/Media_Downloader/actions/workflows/ci.yaml/badge.svg?branch=main&label=Ruff)](https://github.com/Geek-MD/Media_Downloader/actions/workflows/ci.yaml)
 
-<img width="200" height="200" alt="image" src="https://github.com/user-attachments/assets/ce757339-db91-4343-b6b9-0e3ee610d3f2" />
+<img width="200" height="200" alt="image" src="https://github.com/Geek-MD/Media_Downloader/blob/main/logo.png?raw=true" />
 
 # Media Downloader
 
