@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Callable
 from datetime import datetime
 
 from homeassistant.core import HomeAssistant, Event
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
 
@@ -30,7 +28,8 @@ class MediaDownloaderStatusSensor(SensorEntity):
         }
         self._hass = hass
         self._active_processes: set[str] = set()
-        self._listeners = []
+        # List of unsubscribe callbacks returned by hass.bus.async_listen
+        self._listeners: list[Callable[[], None]] = []
 
     async def async_added_to_hass(self) -> None:
         """Run when entity is added to Home Assistant.
@@ -42,7 +41,7 @@ class MediaDownloaderStatusSensor(SensorEntity):
         # Subscribe to the integration events to update last_job attribute
         # media_downloader_job_completed -> last_job = "done"
         # job_interrupted -> last_job = "interrupted"
-        # Keep references to listeners if you want to remove them later.
+        # Store unsubscribe callbacks so they can be removed if needed.
         self._listeners.append(
             self._hass.bus.async_listen(
                 "media_downloader_job_completed", self._handle_job_completed
@@ -80,7 +79,7 @@ class MediaDownloaderStatusSensor(SensorEntity):
             self._attr_extra_state_attributes["last_changed"] = datetime.now().isoformat()
             self.async_write_ha_state()
         except Exception:
-            # do not raise in event handler
+            # Do not raise in event handler
             return
 
     def _handle_job_interrupted(self, event: Event) -> None:
