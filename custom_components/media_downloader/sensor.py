@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 from datetime import datetime
 
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, Event
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.config_entries import ConfigEntry
@@ -13,24 +13,44 @@ from .const import DOMAIN
 
 
 class MediaDownloaderStatusSensor(SensorEntity):
-    """Sensor to track Media Downloader status."""
+    """Sensor to track Media Downloader status and last job result."""
 
     _attr_name = "Media Downloader Status"
     _attr_unique_id = "media_downloader_status"
 
     def __init__(self, hass: HomeAssistant) -> None:
+        """Initialize the sensor entity."""
         self._attr_native_value: str = "idle"
+        # Add last_job attribute (None | "done" | "interrupted")
         self._attr_extra_state_attributes: dict[str, Any] = {
             "last_changed": None,
             "subprocess": None,
             "active_processes": [],
+            "last_job": None,
         }
         self._hass = hass
         self._active_processes: set[str] = set()
+        self._listeners = []
 
     async def async_added_to_hass(self) -> None:
-        """Run when entity is added to hass."""
+        """Run when entity is added to Home Assistant.
+
+        Subscribe to job completed and job interrupted events to keep last_job updated.
+        """
         self._attr_extra_state_attributes["last_changed"] = datetime.now().isoformat()
+
+        # Subscribe to the integration events to update last_job attribute
+        # media_downloader_job_completed -> last_job = "done"
+        # job_interrupted -> last_job = "interrupted"
+        # Keep references to listeners if you want to remove them later.
+        self._listeners.append(
+            self._hass.bus.async_listen(
+                "media_downloader_job_completed", self._handle_job_completed
+            )
+        )
+        self._listeners.append(
+            self._hass.bus.async_listen("job_interrupted", self._handle_job_interrupted)
+        )
 
     def start_process(self, name: str) -> None:
         """Mark a subprocess as started."""
@@ -53,6 +73,25 @@ class MediaDownloaderStatusSensor(SensorEntity):
         self._attr_extra_state_attributes["last_changed"] = datetime.now().isoformat()
         self.async_write_ha_state()
 
+    def _handle_job_completed(self, event: Event) -> None:
+        """Handle integration job completed event and set last_job to 'done'."""
+        try:
+            self._attr_extra_state_attributes["last_job"] = "done"
+            self._attr_extra_state_attributes["last_changed"] = datetime.now().isoformat()
+            self.async_write_ha_state()
+        except Exception:
+            # do not raise in event handler
+            return
+
+    def _handle_job_interrupted(self, event: Event) -> None:
+        """Handle job_interrupted event and set last_job to 'interrupted'."""
+        try:
+            self._attr_extra_state_attributes["last_job"] = "interrupted"
+            self._attr_extra_state_attributes["last_changed"] = datetime.now().isoformat()
+            self.async_write_ha_state()
+        except Exception:
+            return
+
     @property
     def device_info(self) -> DeviceInfo:
         """Return device info for grouping in HA UI."""
@@ -61,14 +100,3 @@ class MediaDownloaderStatusSensor(SensorEntity):
             name="Media Downloader",
             manufacturer="Geek-MD",
         )
-
-
-async def async_setup_entry(
-    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
-) -> None:
-    """Set up the Media Downloader sensor."""
-    sensor = hass.data[DOMAIN].get("status_sensor")
-    if sensor is None:
-        sensor = MediaDownloaderStatusSensor(hass)
-        hass.data[DOMAIN]["status_sensor"] = sensor
-    async_add_entities([sensor])
