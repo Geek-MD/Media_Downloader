@@ -45,7 +45,10 @@ from .video_utils import (
     sanitize_filename,
     guess_filename_from_url,
     ensure_within_base,
-    #...
+    normalize_video_aspect,
+    embed_thumbnail,
+    get_video_dimensions,
+    resize_video,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -112,37 +115,63 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 # Download part
                 async with session.get(url) as resp:
                     if resp.status != 200:
-                        raise HomeAssistantError(f"HTTP status {resp.status}")
+                        raise HomeAssistantError(f"HTTP status {resp.status}: {url}")
 
                     # Stream into temp file
                     with tmp_path.open("wb") as fh:
-                        async for chunk in resp.content.iter_chunked(1024):
-                            fh.write(chunk)
+                        async for chunk in resp.content.iter_chunked(1024 * 64):
+                            if chunk:
+                                fh.write(chunk)
 
-                # Post processing steps (normalize aspect ratio, thumbnail embedding, resize, etc.)
-                # NOTE: keep existing project calls here. The original repo likely runs
-                # normalization/thumbnail/resizing steps after the download; preserve that behavior.
-                # For brevity, placeholder comments are here; keep your actual implementation.
-                #
-                # Example placeholders (replace with existing calls):
-                # await normalize_video_if_needed(dest_path)
-                # await embed_thumbnail_if_needed(dest_path)
-                # if resize_enabled:
-                #     await resize_video_if_needed(dest_path, resize_width, resize_height)
-
-                # Move temp file to final destination or overwrite policy handling:
+                # Check overwrite policy and move temp to final destination
                 if dest_path.exists():
                     if do_overwrite:
                         dest_path.unlink()
                     else:
-                        raise HomeAssistantError("File exists and overwrite is False")
-                tmp_path.rename(dest_path)
+                        raise HomeAssistantError(f"File exists and overwrite is False: {dest_path}")
 
-                # Emit completion event with url and final path
+                # Use os.replace to ensure atomic replace where supported
+                os.replace(tmp_path, dest_path)
+
+                # Emit a download completed event (individual download completed)
+                hass.bus.async_fire("media_downloader_download_completed", {"url": url, "path": str(dest_path)})
+
+                # Always normalize aspect and embed thumbnail
+                try:
+                    if normalize_video_aspect(dest_path):
+                        hass.bus.async_fire("media_downloader_aspect_normalized", {"path": str(dest_path)})
+                except Exception:
+                    _LOGGER.exception("Aspect normalization failed for %s", dest_path)
+
+                try:
+                    if embed_thumbnail(dest_path):
+                        hass.bus.async_fire("media_downloader_thumbnail_embedded", {"path": str(dest_path)})
+                except Exception:
+                    _LOGGER.exception("Embedding thumbnail failed for %s", dest_path)
+
+                # Optional resize flow (only for typical video extensions)
+                if resize_enabled and dest_path.suffix.lower() in {".mp4", ".mov", ".mkv", ".avi"}:
+                    try:
+                        w, h = get_video_dimensions(dest_path)
+                        if w != resize_width or h != resize_height:
+                            sensor.start_process(PROCESS_RESIZING)
+                            resized_ok = resize_video(dest_path, resize_width, resize_height)
+                            if resized_ok:
+                                hass.bus.async_fire("media_downloader_resize_completed", {
+                                    "path": str(dest_path), "width": resize_width, "height": resize_height
+                                })
+                            else:
+                                hass.bus.async_fire("media_downloader_resize_failed", {"path": str(dest_path)})
+                            sensor.end_process(PROCESS_RESIZING)
+                    except Exception:
+                        _LOGGER.exception("Resize processing failed for %s", dest_path)
+                        # If resize fails, emit resize_failed but continue
+
+                # Emit job completed event for the whole workflow
                 hass.bus.async_fire("media_downloader_job_completed", {"url": url, "path": str(dest_path)})
 
             except Exception:
-                # Re-raise to be handled by outer handler (so exceptions trigger download_failed)
+                # Reraise to be handled by the outer handler for download_failed
                 raise
 
         try:
@@ -199,15 +228,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if not path_str:
             raise HomeAssistantError("No path provided")
 
-        path = Path(path_str).resolve()
+        dir_path = Path(path_str).resolve()
         base_dir, _ = _get_config()
-        ensure_within_base(base_dir, path)
+        ensure_within_base(base_dir, dir_path)
 
         sensor = hass.data[DOMAIN]["status_sensor"]
         sensor.start_process(PROCESS_DIR_DELETING)
         try:
-            if path.is_dir():
-                for child in path.iterdir():
+            if dir_path.is_dir():
+                for child in dir_path.iterdir():
                     if child.is_file():
                         child.unlink()
         finally:
