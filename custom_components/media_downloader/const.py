@@ -27,3 +27,8 @@ PROCESS_DOWNLOADING = "downloading"
 PROCESS_RESIZING = "resizing"
 PROCESS_FILE_DELETING = "file_deleting"
 PROCESS_DIR_DELETING = "dir_deleting"
+
+# Events
+# Existing events used elsewhere: e.g. "media_downloader_job_completed"
+# New event emitted when a job is interrupted by timeout
+EVENT_JOB_INTERRUPTED = "job_interrupted"
