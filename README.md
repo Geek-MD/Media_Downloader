@@ -25,8 +25,12 @@
 - Optional video resizing subprocess (width/height) if dimensions differ.  
 - Robust detection of video dimensions using `ffprobe` (JSON) with `ffmpeg -i` fallback.  
 - Persistent status sensor (`sensor.media_downloader_status`) to track operations (`idle` / `working`).  
-- Event support for all processes: download, normalize, thumbnail, resize, and job completion.  
+- Event support for all processes: download, normalize, thumbnail, resize, job interruption and job completion.  
 - Fully compatible with automations and scripts in Home Assistant.
+- Configurable timeout for `media_downloader.download_file` (default 300s). Can be overridden per-service call via `timeout`.
+- New event `job_interrupted` emitted when a job is interrupted due to timeout. Payload: `{ "job": <object_or_id> }`.
+- Added `last_job` attribute to `sensor.media_downloader_status` with values `null` | `"done"` | `"interrupted"`.
+- Added unit tests to validate timeout behavior and event emission.
 
 ---
 
@@ -68,7 +72,8 @@ When adding the integration:
 - **Base download directory** → Absolute path where files will be saved.  
 - **Overwrite** → Whether existing files should be replaced by default.  
 - **Default file delete path** → Optional fallback for the `delete_file` service.  
-- **Default directory delete path** → Optional fallback for the `delete_files_in_directory` service.
+- **Default directory delete path** → Optional fallback for the `delete_files_in_directory` service.  
+- **Download timeout** → Default timeout in seconds for downloads (new in v1.1.2). Default: `300` seconds. You can override per-service call.
 
 You can modify these settings later via the integration options.
 
@@ -90,13 +95,13 @@ For video files:
 | `subdir` | no | Optional subdirectory under the base directory. |
 | `filename` | no | Optional filename (auto-detected if omitted). |
 | `overwrite` | no | Override default overwrite policy. |
-| `timeout` | no | Timeout in seconds (default 300). |
+| `timeout` | no | Timeout in seconds (default 300). Can be set globally in integration options. |
 | `resize_enabled` | no | If true, resize the video when dimensions mismatch. |
 | `resize_width` | no | Target width for resize (default 640). |
 | `resize_height` | no | Target height for resize (default 360). |
 
 #### Example:
-```
+```yaml
 - service: media_downloader.download_file
   data:
     url: "https://example.com/video.mp4"
@@ -105,7 +110,12 @@ For video files:
     resize_enabled: true
     resize_width: 640
     resize_height: 360
+    timeout: 120
 ```
+
+Notes:
+- If a download does not complete within the configured timeout, the integration will emit the `job_interrupted` event (see Events section) and the job will be considered interrupted.
+- Existing calls without an explicit `timeout` will continue to use the default value (300s) to preserve backward compatibility.
 
 ---
 
@@ -144,6 +154,20 @@ The integration provides the persistent entity:
 | `last_changed` | Datetime when state last changed. |
 | `subprocess` | Current subprocess name (`downloading`, `normalizing`, `thumbnail`, `resizing`, `file_deleting`, `dir_deleting`). |
 | `active_processes` | List of all currently active subprocesses. |
+| `last_job` | Result of the last completed job: `null` (none yet), `"done"` (last job finished successfully) or `"interrupted"` (last job was interrupted due to timeout). Added in v1.1.2. |
+
+Usage example:
+```json
+{
+  "state": "ready",
+  "attributes": {
+    "last_changed": "2025-11-14T12:00:00Z",
+    "subprocess": "downloading",
+    "active_processes": ["downloading"],
+    "last_job": "done"
+  }
+}
+```
 
 ---
 
@@ -158,6 +182,24 @@ The integration provides the persistent entity:
 | `media_downloader_resize_failed` | Resize process failed. | `path` |
 | `media_downloader_download_failed` | Download failed. | `url`, `error` |
 | `media_downloader_job_completed` | Entire workflow completed. | `url`, `path` |
+| `job_interrupted` | A job exceeded the configured timeout and was interrupted (new in v1.1.2). | `job`: object or identifier of the interrupted job |
+
+Notes about `job_interrupted`:
+- Emitted when the full workflow for a download does not complete within the configured timeout (either the per-call `timeout` or the integration default).
+- Payload at minimum contains `{ "job": <object_or_id> }`. Consumers can use this event to trigger cleanup, notifications, or retries.
+
+Listening example:
+```yaml
+- alias: Notify on interrupted download
+  trigger:
+    platform: event
+    event_type: job_interrupted
+  action:
+    - service: persistent_notification.create
+      data:
+        title: "Media Downloader"
+        message: "A download job was interrupted by timeout."
+```
 
 ---
 
@@ -172,6 +214,7 @@ The integration provides the persistent entity:
     resize_enabled: true
     resize_width: 640
     resize_height: 360
+    timeout: 120
 
 - wait_for_trigger:
     - platform: event
@@ -185,6 +228,8 @@ The integration provides the persistent entity:
     video: "{{ wait.trigger.event.data.path }}"
     caption: "New video from Ring (normalized with thumbnail)."
 ```
+
+If the download takes longer than the configured timeout, `job_interrupted` will be emitted and `sensor.media_downloader_status.attributes.last_job` will be set to `"interrupted"`.
 
 ---
 
