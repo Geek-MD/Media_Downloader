@@ -6,6 +6,8 @@ from datetime import datetime
 from homeassistant.core import HomeAssistant, Event
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
 
@@ -50,6 +52,16 @@ class MediaDownloaderStatusSensor(SensorEntity):
         self._listeners.append(
             self._hass.bus.async_listen("job_interrupted", self._handle_job_interrupted)
         )
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Cleanup listeners when entity is removed from hass."""
+        for unsub in self._listeners:
+            try:
+                unsub()
+            except Exception:
+                # ignore errors during cleanup
+                pass
+        self._listeners.clear()
 
     def start_process(self, name: str) -> None:
         """Mark a subprocess as started."""
@@ -99,3 +111,16 @@ class MediaDownloaderStatusSensor(SensorEntity):
             name="Media Downloader",
             manufacturer="Geek-MD",
         )
+
+
+async def async_setup_entry(
+    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+) -> None:
+    """Set up the Media Downloader sensor for a config entry."""
+    # Ensure domain storage exists
+    hass.data.setdefault(DOMAIN, {})
+    sensor = hass.data[DOMAIN].get("status_sensor")
+    if sensor is None:
+        sensor = MediaDownloaderStatusSensor(hass)
+        hass.data[DOMAIN]["status_sensor"] = sensor
+    async_add_entities([sensor])
