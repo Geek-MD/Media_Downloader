@@ -9,7 +9,7 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN
+from .const import DOMAIN, EVENT_JOB_INTERRUPTED_NS, EVENT_JOB_INTERRUPTED
 
 
 class MediaDownloaderStatusSensor(SensorEntity):
@@ -42,15 +42,18 @@ class MediaDownloaderStatusSensor(SensorEntity):
 
         # Subscribe to the integration events to update last_job attribute
         # media_downloader_job_completed -> last_job = "done"
-        # job_interrupted -> last_job = "interrupted"
-        # Store unsubscribe callbacks so they can be removed if needed.
+        # job_interrupted and media_downloader_job_interrupted -> last_job = "interrupted"
         self._listeners.append(
             self._hass.bus.async_listen(
                 "media_downloader_job_completed", self._handle_job_completed
             )
         )
+        # listen to both interruption event names
         self._listeners.append(
-            self._hass.bus.async_listen("job_interrupted", self._handle_job_interrupted)
+            self._hass.bus.async_listen(EVENT_JOB_INTERRUPTED, self._handle_job_interrupted)
+        )
+        self._listeners.append(
+            self._hass.bus.async_listen(EVENT_JOB_INTERRUPTED_NS, self._handle_job_interrupted)
         )
 
     async def async_will_remove_from_hass(self) -> None:
@@ -70,6 +73,7 @@ class MediaDownloaderStatusSensor(SensorEntity):
         self._attr_extra_state_attributes["subprocess"] = name
         self._attr_extra_state_attributes["active_processes"] = list(self._active_processes)
         self._attr_extra_state_attributes["last_changed"] = datetime.now().isoformat()
+        # async_write_ha_state must be called on the event loop thread
         self.async_write_ha_state()
 
     def end_process(self, name: str) -> None:
@@ -82,6 +86,7 @@ class MediaDownloaderStatusSensor(SensorEntity):
             self._attr_extra_state_attributes["subprocess"] = next(iter(self._active_processes))
         self._attr_extra_state_attributes["active_processes"] = list(self._active_processes)
         self._attr_extra_state_attributes["last_changed"] = datetime.now().isoformat()
+        # async_write_ha_state must be called on the event loop thread
         self.async_write_ha_state()
 
     def _handle_job_completed(self, event: Event) -> None:
