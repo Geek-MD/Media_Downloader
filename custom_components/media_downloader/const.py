@@ -29,6 +29,7 @@ PROCESS_FILE_DELETING = "file_deleting"
 PROCESS_DIR_DELETING = "dir_deleting"
 
 # Events
-# Existing events used elsewhere: e.g. "media_downloader_job_completed"
-# New event emitted when a job is interrupted by timeout
+# Non-namespaced event requested earlier
 EVENT_JOB_INTERRUPTED = "job_interrupted"
+# Namespaced event for compatibility / clearer automations
+EVENT_JOB_INTERRUPTED_NS = "media_downloader_job_interrupted"
