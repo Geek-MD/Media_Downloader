@@ -39,6 +39,7 @@ from .const import (
     PROCESS_FILE_DELETING,
     PROCESS_DIR_DELETING,
     EVENT_JOB_INTERRUPTED,
+    EVENT_JOB_INTERRUPTED_NS,
 )
 
 from .video_utils import (
@@ -112,7 +113,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         async def _run_workflow() -> None:
             """Encapsulate full workflow so it can be run with asyncio.wait_for for total timeout."""
             try:
-                # Download part
+                # Download part (this is async and runs on the event loop)
                 async with session.get(url) as resp:
                     if resp.status != 200:
                         raise HomeAssistantError(f"HTTP status {resp.status}: {url}")
@@ -123,7 +124,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                             if chunk:
                                 fh.write(chunk)
 
-                # Check overwrite policy and move temp to final destination
+                # Move temp file to final destination considering overwrite policy
                 if dest_path.exists():
                     if do_overwrite:
                         dest_path.unlink()
@@ -133,45 +134,60 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 # Use os.replace to ensure atomic replace where supported
                 os.replace(tmp_path, dest_path)
 
-                # Emit a download completed event (individual download completed)
+                # Emit a download completed event (download-only)
                 hass.bus.async_fire("media_downloader_download_completed", {"url": url, "path": str(dest_path)})
 
-                # Always normalize aspect and embed thumbnail
+                # --- Post-processing steps (potentially blocking) ---
+                # Run blocking functions in executor and await them to avoid blocking the event loop.
+                # Normalize aspect ratio
                 try:
-                    if normalize_video_aspect(dest_path):
+                    normalized = await hass.async_add_executor_job(normalize_video_aspect, dest_path)
+                    if normalized:
                         hass.bus.async_fire("media_downloader_aspect_normalized", {"path": str(dest_path)})
                 except Exception:
                     _LOGGER.exception("Aspect normalization failed for %s", dest_path)
 
+                # Embed thumbnail (blocking)
                 try:
-                    if embed_thumbnail(dest_path):
+                    embedded = await hass.async_add_executor_job(embed_thumbnail, dest_path)
+                    if embedded:
                         hass.bus.async_fire("media_downloader_thumbnail_embedded", {"path": str(dest_path)})
                 except Exception:
                     _LOGGER.exception("Embedding thumbnail failed for %s", dest_path)
 
-                # Optional resize flow (only for typical video extensions)
+                # Optional resize flow (blocking)
                 if resize_enabled and dest_path.suffix.lower() in {".mp4", ".mov", ".mkv", ".avi"}:
                     try:
-                        w, h = get_video_dimensions(dest_path)
-                        if w != resize_width or h != resize_height:
-                            sensor.start_process(PROCESS_RESIZING)
-                            resized_ok = resize_video(dest_path, resize_width, resize_height)
-                            if resized_ok:
-                                hass.bus.async_fire("media_downloader_resize_completed", {
-                                    "path": str(dest_path), "width": resize_width, "height": resize_height
-                                })
-                            else:
-                                hass.bus.async_fire("media_downloader_resize_failed", {"path": str(dest_path)})
-                            sensor.end_process(PROCESS_RESIZING)
+                        # get_video_dimensions may be blocking; run in executor
+                        w_h = await hass.async_add_executor_job(get_video_dimensions, dest_path)
+                        if w_h:
+                            w, h = w_h
+                            if w != resize_width or h != resize_height:
+                                # Mark resizing as started on the event loop
+                                sensor.start_process(PROCESS_RESIZING)
+                                try:
+                                    resized_ok = await hass.async_add_executor_job(
+                                        resize_video, dest_path, resize_width, resize_height
+                                    )
+                                    if resized_ok:
+                                        hass.bus.async_fire("media_downloader_resize_completed", {
+                                            "path": str(dest_path), "width": resize_width, "height": resize_height
+                                        })
+                                    else:
+                                        hass.bus.async_fire("media_downloader_resize_failed", {"path": str(dest_path)})
+                                except Exception:
+                                    _LOGGER.exception("Resize processing failed for %s", dest_path)
+                                finally:
+                                    # End the resizing process on the event loop
+                                    sensor.end_process(PROCESS_RESIZING)
                     except Exception:
-                        _LOGGER.exception("Resize processing failed for %s", dest_path)
-                        # If resize fails, emit resize_failed but continue
+                        _LOGGER.exception("Resize dimension detection failed for %s", dest_path)
 
                 # Emit job completed event for the whole workflow
                 hass.bus.async_fire("media_downloader_job_completed", {"url": url, "path": str(dest_path)})
 
             except Exception:
-                # Reraise to be handled by the outer handler for download_failed
+                # Re-raise to be handled by the outer handler (download_failed)
                 raise
 
         try:
@@ -179,11 +195,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             await asyncio.wait_for(_run_workflow(), timeout=timeout_sec)
         except asyncio.TimeoutError:
             _LOGGER.warning("Download job timed out for URL %s (timeout: %s s)", url, timeout_sec)
-            # Emit a job_interrupted event with job metadata
+            # Emit both non-namespaced and namespaced interruption events
             try:
                 hass.bus.async_fire(EVENT_JOB_INTERRUPTED, {"job": {"url": url, "path": str(dest_path)}})
+                hass.bus.async_fire(EVENT_JOB_INTERRUPTED_NS, {"job": {"url": url, "path": str(dest_path)}})
             except Exception:
-                _LOGGER.exception("Failed to emit job_interrupted event")
+                _LOGGER.exception("Failed to emit job_interrupted events")
 
             # Attempt to clean up temp file if it still exists
             try:
