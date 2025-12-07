@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
-import async_timeout
 import aiohttp
 import logging
 from pathlib import Path
@@ -110,7 +110,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             tmp_path.unlink(missing_ok=True)
 
         try:
-            async with async_timeout.timeout(timeout_sec):
+            async with asyncio.timeout(timeout_sec):
                 async with session.get(url) as resp:
                     if resp.status != 200:
                         raise HomeAssistantError(f"HTTP error {resp.status}: {url}")

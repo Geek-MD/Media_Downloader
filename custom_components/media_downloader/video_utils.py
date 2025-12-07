@@ -77,13 +77,13 @@ def get_video_dimensions(path: Path) -> tuple[int, int]:
 
 def normalize_video_aspect(path: Path) -> bool:
     """Normalize video aspect ratio to prevent square appearance in Telegram."""
+    tmp_file = path.with_suffix(".normalized" + path.suffix)
     try:
         w, h = get_video_dimensions(path)
         if w == 0 or h == 0:
             _LOGGER.warning("Could not determine video dimensions for %s", path)
             return False
 
-        tmp_file = path.with_suffix(".normalized" + path.suffix)
         cmd = [
             "ffmpeg", "-y", "-i", str(path),
             "-vf", f"setsar=1,setdar={w}/{h}",
@@ -104,8 +104,9 @@ def normalize_video_aspect(path: Path) -> bool:
 
 def embed_thumbnail(path: Path) -> bool:
     """Generate and embed a thumbnail to ensure Telegram uses correct preview."""
+    thumb_path = path.with_suffix(".jpg")
+    tmp_output = path.with_suffix(".thumb" + path.suffix)
     try:
-        thumb_path = path.with_suffix(".jpg")
         # Extract the first frame as thumbnail
         subprocess.run([
             "ffmpeg", "-y", "-i", str(path),
@@ -117,7 +118,6 @@ def embed_thumbnail(path: Path) -> bool:
             _LOGGER.warning("Thumbnail generation failed for %s", path)
             return False
 
-        tmp_output = path.with_suffix(".thumb" + path.suffix)
         subprocess.run([
             "ffmpeg", "-y",
             "-i", str(path),
@@ -135,6 +135,10 @@ def embed_thumbnail(path: Path) -> bool:
 
     except Exception as err:
         _LOGGER.warning("Thumbnail embedding failed for %s: %s", path, err)
+        if thumb_path.exists():
+            thumb_path.unlink(missing_ok=True)
+        if tmp_output.exists():
+            tmp_output.unlink(missing_ok=True)
         return False
 
 
