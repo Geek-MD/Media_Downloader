@@ -17,7 +17,9 @@
         "title": "Media Downloader Options",
         "data": {
           "download_dir": "Base download directory",
-          "overwrite": "Overwrite by default"
+          "overwrite": "Overwrite by default",
+          "delete_file_path": "Default file path for deletion",
+          "delete_directory_path": "Default directory path for deletion"
         }
       }
     }

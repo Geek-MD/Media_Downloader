@@ -17,7 +17,9 @@
         "title": "Opciones de Media Downloader",
         "data": {
           "download_dir": "Directorio base de descargas",
-          "overwrite": "Sobrescribir por defecto"
+          "overwrite": "Sobrescribir por defecto",
+          "delete_file_path": "Ruta de archivo predeterminada para eliminación",
+          "delete_directory_path": "Ruta de directorio predeterminada para eliminación"
         }
       }
     }
