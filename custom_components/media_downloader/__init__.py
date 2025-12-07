@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-import async_timeout
+import sys
 import aiohttp
 import logging
 from pathlib import Path
@@ -14,6 +14,12 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.helpers import aiohttp_client, config_validation as cv
 from homeassistant.exceptions import HomeAssistantError
+
+# Handle asyncio.timeout availability (Python 3.11+)
+if sys.version_info >= (3, 11):
+    from asyncio import timeout as asyncio_timeout
+else:
+    from async_timeout import timeout as asyncio_timeout  # type: ignore[import-not-found]
 
 from .const import (
     DOMAIN,
@@ -110,7 +116,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             tmp_path.unlink(missing_ok=True)
 
         try:
-            async with async_timeout.timeout(timeout_sec):
+            async with asyncio_timeout(timeout_sec):
                 async with session.get(url) as resp:
                     if resp.status != 200:
                         raise HomeAssistantError(f"HTTP error {resp.status}: {url}")
