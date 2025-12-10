@@ -91,7 +91,7 @@ def normalize_video_aspect(path: Path) -> bool:
             "-crf", "18", "-c:a", "copy",
             str(tmp_file)
         ]
-        subprocess.run(cmd, check=True)
+        subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=300)
         os.replace(tmp_file, path)
         _LOGGER.info("Aspect ratio normalized for %s", path)
         return True
@@ -112,7 +112,7 @@ def embed_thumbnail(path: Path) -> bool:
             "ffmpeg", "-y", "-i", str(path),
             "-vf", "select=eq(n\\,0)", "-vframes", "1",
             str(thumb_path)
-        ], check=True)
+        ], check=True, capture_output=True, text=True, timeout=60)
 
         if not thumb_path.exists():
             _LOGGER.warning("Thumbnail generation failed for %s", path)
@@ -126,7 +126,7 @@ def embed_thumbnail(path: Path) -> bool:
             "-c", "copy",
             "-disposition:v:1", "attached_pic",
             str(tmp_output)
-        ], check=True)
+        ], check=True, capture_output=True, text=True, timeout=120)
 
         os.replace(tmp_output, path)
         thumb_path.unlink(missing_ok=True)
@@ -152,7 +152,7 @@ def resize_video(path: Path, width: int, height: int) -> bool:
         str(tmp_resized)
     ]
     try:
-        subprocess.run(cmd, check=True)
+        subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=300)
         os.replace(tmp_resized, path)
         _LOGGER.info("Video resized successfully: %s", path)
         return True
