@@ -41,17 +41,42 @@ jobs:
             echo "Tag v${{ steps.get_version.outputs.version }} does not exist"
           fi
       
+      - name: Generate changelog
+        if: steps.check_tag.outputs.exists == 'false'
+        id: changelog
+        run: |
+          # Get the previous tag
+          PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          
+          if [ -z "$PREV_TAG" ]; then
+            echo "No previous tag found, generating full changelog"
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" --no-merges)
+          else
+            echo "Previous tag: $PREV_TAG"
+            CHANGELOG=$(git log "${PREV_TAG}..HEAD" --pretty=format:"- %s (%h)" --no-merges)
+          fi
+          
+          # Create changelog file
+          cat > CHANGELOG.md <<EOF
+          ## What's Changed
+          
+          ${CHANGELOG}
+          
+          **Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG}...v${{ steps.get_version.outputs.version }}
+          EOF
+          
+          echo "Changelog generated:"
+          cat CHANGELOG.md
+      
       - name: Create Release
         if: steps.check_tag.outputs.exists == 'false'
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.get_version.outputs.tag }}
-          release_name: ${{ steps.get_version.outputs.tag }}
-          body: |
-            Release ${{ steps.get_version.outputs.tag }}
-            
-            This release corresponds to version ${{ steps.get_version.outputs.version }} from manifest.json
+          name: ${{ steps.get_version.outputs.tag }}
+          body_path: CHANGELOG.md
           draft: false
           prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
