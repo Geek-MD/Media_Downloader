@@ -97,6 +97,8 @@ def normalize_video_aspect(path: Path) -> bool:
         return True
     except Exception as err:
         _LOGGER.warning("Aspect normalization failed for %s: %s", path, err)
+        if hasattr(err, 'stderr') and err.stderr:
+            _LOGGER.debug("ffmpeg stderr: %s", err.stderr)
         if tmp_file.exists():
             tmp_file.unlink(missing_ok=True)
         return False
@@ -135,6 +137,8 @@ def embed_thumbnail(path: Path) -> bool:
 
     except Exception as err:
         _LOGGER.warning("Thumbnail embedding failed for %s: %s", path, err)
+        if hasattr(err, 'stderr') and err.stderr:
+            _LOGGER.debug("ffmpeg stderr: %s", err.stderr)
         if thumb_path.exists():
             thumb_path.unlink(missing_ok=True)
         if tmp_output.exists():
@@ -158,6 +162,8 @@ def resize_video(path: Path, width: int, height: int) -> bool:
         return True
     except Exception as err:
         _LOGGER.error("Video resize failed for %s: %s", path, err)
+        if hasattr(err, 'stderr') and err.stderr:
+            _LOGGER.debug("ffmpeg stderr: %s", err.stderr)
         if tmp_resized.exists():
             tmp_resized.unlink(missing_ok=True)
         return False
